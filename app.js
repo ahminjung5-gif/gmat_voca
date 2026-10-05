@@ -105,7 +105,7 @@
       (saved.days || []).forEach((d) => dayCounts[d] && settings.days.add(d));
       if (saved.mode === "m" || saved.mode === "v") settings.mode = saved.mode;
       if (saved.view === "study") settings.view = "study";
-      if (saved.stFilter === "flag") settings.stFilter = "flag";
+      if (["flag", "unknown"].includes(saved.stFilter)) settings.stFilter = saved.stFilter;
       if (saved.stOrder === "shuf") settings.stOrder = "shuf";
       if (saved.stFront === "mean") settings.stFront = "mean";
       if (["recent", "day", "abc"].includes(saved.wbSort)) settings.wbSort = saved.wbSort;
@@ -123,20 +123,28 @@
     el.dayGrid.innerHTML = allDays.map((d) =>
       `<button type="button" class="day-chip" data-day="${d}" aria-pressed="${settings.days.has(d)}">
          <span class="d">Day ${d}</span><span class="n">${dayCounts[d]}단어</span>
-         <span class="fl" hidden><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><b class="num"></b></span>
+         <span class="prog" aria-hidden="true"><i></i></span>
+         <span class="fl" hidden><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><b class="num"></b></span>
        </button>`).join("");
   }
 
-  // Day 칸: 그 Day에서 체크한 헷갈리는 단어 수
+  // Day 칸: 진도 막대 = 외운 단어(오키) 비율, 배지 = 헷갈리는 단어(애매) 수
   function renderDayProgress() {
-    const by = {};
-    WORDS.forEach((w) => { if (Store.isFlagged(w.w)) by[w.d] = (by[w.d] || 0) + 1; });
+    const vague = {}, known = {};
+    WORDS.forEach((w) => {
+      const m = Store.getMark(w.w);
+      if (m === "vague") vague[w.d] = (vague[w.d] || 0) + 1;
+      else if (m === "known") known[w.d] = (known[w.d] || 0) + 1;
+    });
     document.querySelectorAll(".day-chip").forEach((b) => {
-      const n = by[b.dataset.day] || 0;
+      const d = b.dataset.day, total = dayCounts[d] || 0;
+      const k = known[d] || 0, v = vague[d] || 0;
+      b.querySelector(".prog i").style.width = (total ? Math.round((k / total) * 100) : 0) + "%";
+      b.classList.toggle("done", total > 0 && k === total);
       const fl = b.querySelector(".fl");
-      fl.hidden = n === 0;
-      fl.querySelector("b").textContent = n;
-      b.title = n ? `헷갈리는 단어 ${n}개` : "";
+      fl.hidden = v === 0;
+      fl.querySelector("b").textContent = v;
+      b.title = `외운 단어 ${k}/${total}` + (v ? `, 헷갈리는 단어 ${v}` : "");
     });
   }
 
@@ -524,6 +532,7 @@
                   : `${nick ? nick + "님, " : ""}오늘 기록이 저장됐어요. 내일 한 번 더 오면 연속 학습이 시작돼요.`;
 
     showScreen("result");
+    if (answeredCount > 0) checkTierUp();
   }
 
   $("btn-retry-wrong").addEventListener("click", () => {
@@ -609,23 +618,9 @@
     const today = st.daily[Store.dayKey()];
     $("k-today").textContent = today ? today.n : 0;
 
-    $("k-viewed").textContent = today ? today.v || 0 : 0;
-    const flagCount = Object.keys(st.flags).length;
-    $("k-flag").textContent = flagCount;
-    $("wb-count").textContent = flagCount;
-
-    // 최근 14일 학습량
-    const days = Store.lastDays(14);
-    // 게임에서 푼 단어 + 공부 모드에서 본 카드
-    const amount = (d) => d.n + (d.v || 0);
-    const max = Math.max(10, ...days.map(amount));
-    $("activity").innerHTML = days.map((d, i) => {
-      const t = amount(d);
-      const h = t ? Math.max(8, Math.round((t / max) * 100)) : 0;
-      const label = `${d.date.getMonth() + 1}/${d.date.getDate()}`;
-      return `<div class="bar-col${i === days.length - 1 ? " today" : ""}" title="${label}: 게임 ${d.n}개, 카드 ${d.v || 0}장">
-        <div class="bar"><i style="height:${h}%"></i></div><span>${i === days.length - 1 ? "오늘" : d.date.getDate()}</span></div>`;
-    }).join("");
+    $("k-known").textContent = Store.todayKnown();
+    $("k-flag").textContent = Store.countMarks("vague");
+    renderStreak();
 
     // 최근 학습 목록
     const list = st.sessions.slice(0, 8);
@@ -635,12 +630,55 @@
       const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
       const tag = (String(x.result).match(/^(note|flag)-/) || [])[1];
       const res = String(x.result).replace(/^(note|flag)-/, "");
-      const dayLabel = tag === "note" ? "오답 노트" : tag === "flag" ? "헷갈리는 단어장"
+      const dayLabel = tag === "note" ? "오답 노트" : tag === "flag" ? "단어장"
         : x.days.length > 3 ? `Day ${x.days.length}개` : x.days.map((n) => `Day ${n}`).join(", ");
       return `<li><span class="num muted">${when}</span><span>${esc(dayLabel)} <small class="muted">${MODE_LABEL[x.mode] || ""}</small></span>
         <span class="num">${x.correct}/${x.correct + x.wrong}</span><span class="tag ${res}">${RESULT_LABEL[res] || res}</span></li>`;
     }).join("") : `<li class="empty">첫 학습을 시작하면 여기에 쌓여요.</li>`;
   }
+
+  // 연속 학습일 캐릭터 카드
+  function renderStreak() {
+    const days = Store.streakDays();
+    const t = Mascot.tierOf(days), cur = Mascot.TIERS[t], nx = Mascot.TIERS[t + 1];
+    $("k-streak").textContent = days;
+    $("streak-sprite").innerHTML = Mascot.svg(t);
+    $("streak-lv").textContent = `LV.${t}`;
+    $("streak-name").textContent = cur.name;
+    $("streak-bar").style.width = (nx ? Math.round(((days - cur.d) / (nx.d - cur.d)) * 100) : 100) + "%";
+    const best = Store.bestStreak();
+    $("streak-next").textContent = (nx ? `다음 변신 <${nx.name}>까지 ${nx.d - days}일` : "최종 변신 완료")
+      + (best > days ? ` · 최고 ${best}일` : "");
+  }
+
+  // 변신 화면: 단계가 오르면 한 번 보여줌
+  const tierKey = () => "gmat-voca-tier:" + (Store.state.user ? Store.state.user.id : "guest");
+  function showMascot(stage, kicker) {
+    const t = Mascot.TIERS[stage];
+    $("mascot-kicker").textContent = kicker;
+    $("mascot-sprite").innerHTML = Mascot.svg(stage);
+    $("mascot-line").textContent = t.line;
+    $("mascot-say").textContent = `[${t.say}]`;
+    $("mascot-tiers").innerHTML = Mascot.TIERS.slice(1).map((x, i) =>
+      `<span class="${i + 1 <= stage ? "got" : ""}${i + 1 === stage ? " cur" : ""}">${x.d}일 ${esc(x.name)}</span>`).join("");
+    const st = $("mascot-stage");
+    st.classList.remove("pop"); void st.offsetWidth; st.classList.add("pop");
+    openModal($("mascot-modal"));
+    $("mascot-ok").focus();
+  }
+  function checkTierUp() {
+    const t = Mascot.tierOf(Store.streakDays());
+    let seen = -1;
+    try { seen = Number(localStorage.getItem(tierKey()) ?? -1); } catch (_) {}
+    if (t > seen && t > 0) { showMascot(t, "TRANSFORM!"); }
+    try { localStorage.setItem(tierKey(), String(t)); } catch (_) {}
+  }
+  $("mascot-ok").addEventListener("click", () => closeModal($("mascot-modal")));
+  $("mascot-modal").addEventListener("click", (e) => { if (e.target.id === "mascot-modal") closeModal($("mascot-modal")); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("mascot-modal").hidden) { e.preventDefault(); e.stopImmediatePropagation(); closeModal($("mascot-modal")); }
+  }, true);
+  $("streak-sprite").addEventListener("click", () => showMascot(Mascot.tierOf(Store.streakDays()), "MY STATUS"));
 
   function refreshSetup() {
     renderUser(); renderSync(); renderRecords(); renderDayProgress(); renderStudyOptions(); updateSummary();
@@ -700,7 +738,7 @@
     if (screens.setup.classList.contains("active")) refreshSetup();
     else { renderSync(); renderDayProgress(); }
     if (screens.wordbook.classList.contains("active")) updateWordbookHead();
-    if (screens.study.classList.contains("active")) renderStudyFlag();
+    if (screens.study.classList.contains("active")) renderStudyMark();
     // 로그인 직후: 로그인 창 닫고, 닉네임이 없으면 설정 창 띄우기
     const uid = st.user ? st.user.id : null;
     if (uid && uid !== lastUserId) closeModal($("login-modal"));
@@ -709,15 +747,16 @@
   });
 
   /* =========================================================
-     공부 모드 · 헷갈리는 단어장
+     공부 모드 · 단어장 (오키 = 외운 단어, 애매 = 헷갈리는 단어)
      ========================================================= */
   const byWord = new Map(WORDS.map((w) => [w.w, w]));
+  const MARK_LABEL = { known: "외운 단어", vague: "헷갈리는 단어" };
 
+  // 게임 결과 등에서 쓰는 '애매' 토글 버튼
   function flagBtnHtml(word) {
     const on = Store.isFlagged(word);
-    return `<button type="button" class="icon-btn flag-btn${on ? " on" : ""}" data-flag-word="${esc(word)}" aria-pressed="${on}" aria-label="${on ? "헷갈리는 단어장에서 빼기" : "헷갈리는 단어장에 넣기"}"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg></button>`;
+    return `<button type="button" class="icon-btn flag-btn${on ? " on" : ""}" data-flag-word="${esc(word)}" aria-pressed="${on}" aria-label="${on ? "헷갈리는 단어에서 빼기" : "헷갈리는 단어에 넣기"}" title="헷갈리는 단어"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg></button>`;
   }
-  // 어디서든 data-flag-word 버튼을 누르면 체크 토글
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-flag-word]");
     if (!b) return;
@@ -725,23 +764,25 @@
     const on = Store.toggleFlag(b.dataset.flagWord);
     b.classList.toggle("on", on);
     b.setAttribute("aria-pressed", String(on));
-    b.setAttribute("aria-label", on ? "헷갈리는 단어장에서 빼기" : "헷갈리는 단어장에 넣기");
+    b.setAttribute("aria-label", on ? "헷갈리는 단어에서 빼기" : "헷갈리는 단어에 넣기");
   });
 
   /* ---------- 게임 / 공부 전환 ---------- */
   function setView(v) {
     settings.view = v;
     screens.setup.dataset.view = v;
-    document.querySelectorAll(".view-seg [data-view]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
+    document.querySelectorAll("#screen-setup .view-seg [data-view]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
     updateSummary();
   }
-  document.querySelectorAll(".view-seg [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+  document.querySelectorAll("#screen-setup .view-seg [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 
   /* ---------- 공부 옵션 ---------- */
   const STUDY_FILTERS = {
     all: () => true,
     flag: (w) => Store.isFlagged(w.w),
+    unknown: (w) => !Store.isKnown(w.w),
   };
+  if (!STUDY_FILTERS[settings.stFilter]) settings.stFilter = "all";
   function studyBase(days = settings.days) { return WORDS.filter((w) => days.has(w.d) && w.w); }
   function studyList() { return studyBase().filter(STUDY_FILTERS[settings.stFilter]); }
   const posKey = () => [...settings.days].sort((a, b) => a - b).join(",");
@@ -759,7 +800,7 @@
     setPills("st-order", settings.stOrder);
     setPills("st-front", settings.stFront);
     const base = studyBase();
-    ["flag"].forEach((k) => {
+    ["flag", "unknown"].forEach((k) => {
       const span = document.querySelector(`#st-filter [data-v="${k}"] .num`);
       if (span) span.textContent = settings.days.size ? base.filter(STUDY_FILTERS[k]).length : "";
     });
@@ -782,7 +823,8 @@
       el.summary.textContent = "Day를 하나 이상 선택하세요.";
     } else if (n === 0) {
       el.summary.textContent = settings.stFilter === "flag"
-        ? "고른 Day에 체크한 단어가 없어요. 전체로 보면서 헷갈리는 걸 체크해 보세요."
+        ? "고른 Day에 헷갈리는 단어가 없어요. 전체로 보면서 애매한 건 '애매'로 체크해 보세요."
+        : settings.stFilter === "unknown" ? "고른 Day의 단어를 전부 외웠어요. 정말 대단해요."
         : "볼 단어가 없어요.";
     } else {
       const pos = canResume() ? Store.getStudyPos(posKey()) : 0;
@@ -806,8 +848,10 @@
     if (i >= items.length) i = 0;
     study = {
       list: items, i, flip: false, front: opts.front || settings.stFront,
-      key, label: opts.label || "", viewed: new Set(), pendingBack: null, swiping: false,
+      key, label: opts.label || "", viewed: new Set(), pendingBack: null,
+      startMarks: Object.fromEntries(items.map((w) => [w.w, Store.getMark(w.w)])),
     };
+    setStudyView("card", false);
     showScreen("study");
     renderStudyCard(true);
   }
@@ -815,7 +859,7 @@
   function startStudyFromSetup() {
     const list = studyList();
     const sorted = [...settings.days].sort((a, b) => a - b);
-    const filterLabel = { all: "", flag: " 헷갈리는 단어" }[settings.stFilter];
+    const filterLabel = { all: "", flag: " 헷갈리는 단어", unknown: " 안 외운 단어" }[settings.stFilter];
     const dayLabel = sorted.length <= 3 ? sorted.map((d) => `Day ${d}`).join(", ") : `Day ${sorted.length}개`;
     startStudy(list, { resumeKey: canResume() ? posKey() : null, label: dayLabel + filterLabel });
   }
@@ -843,17 +887,22 @@
       </dl>`;
   }
 
-  function renderStudyFlag() {
+  function renderStudyMark() {
     if (!study) return;
-    const on = Store.isFlagged(study.list[study.i].w);
-    document.querySelectorAll("#sd-card [data-flag]").forEach((b) => {
-      b.classList.toggle("on", on);
-      b.setAttribute("aria-pressed", String(on));
+    const m = Store.getMark(study.list[study.i].w);
+    document.querySelectorAll("#sd-card [data-marktag]").forEach((t) => {
+      t.hidden = !m;
+      t.className = "mark-tag " + (m || "");
+      t.textContent = m ? MARK_LABEL[m] : "";
     });
-    const main = $("sd-flag");
-    main.classList.toggle("on", on);
-    main.setAttribute("aria-pressed", String(on));
-    main.querySelector("span").textContent = on ? "체크됨" : "헷갈려요";
+    [["sd-ok", "known"], ["sd-vague", "vague"]].forEach(([id, s]) => {
+      const b = $(id);
+      b.classList.toggle("on", m === s);
+      b.setAttribute("aria-pressed", String(m === s));
+    });
+    // 리스트에 표시 중이면 그 줄도 갱신
+    const li = document.querySelector(`#sd-list li[data-i="${study.i}"] .mark-pill`);
+    if (li) setPill(li, m);
   }
 
   function renderStudyCard(first = false, dir = 0) {
@@ -865,7 +914,6 @@
     card.classList.remove("flipped");
     $("sd-front").innerHTML = studyFront(x);
     $("sd-front").scrollTop = 0;
-    // 뒤집혀 있던 카드는 돌아가는 동안 뒷면 내용이 보이지 않게 조금 늦게 바꿈
     const setBack = () => { $("sd-back").innerHTML = studyBack(x); $("sd-back").scrollTop = 0; study.pendingBack = null; };
     clearTimeout(study.backTimer);
     if (wasFlipped && !first) { study.pendingBack = setBack; study.backTimer = setTimeout(setBack, 480); }
@@ -877,7 +925,7 @@
     $("sd-bar").style.width = `${((study.i + 1) / n) * 100}%`;
     $("sd-prev").disabled = study.i === 0;
     $("sd-next").querySelector("span").textContent = study.i === n - 1 ? "끝내기" : "다음";
-    renderStudyFlag();
+    renderStudyMark();
 
     if (dir) {
       const wrap = $("sd-wrap");
@@ -903,26 +951,80 @@
     study.i = ni;
     renderStudyCard(false, delta);
   }
-  function toggleStudyFlag() {
+  function markStudy(status) {
     if (!study) return;
-    Store.toggleFlag(study.list[study.i].w);
-    renderStudyFlag();
+    Store.toggleMark(study.list[study.i].w, status);
+    renderStudyMark();
   }
+
+  /* ---------- 카드 / 리스트 전환 ---------- */
+  function setPill(node, m) {
+    node.className = "mark-pill " + (m || "none");
+    node.textContent = m === "known" ? "오키" : m === "vague" ? "애매" : "";
+  }
+  function renderStudyList() {
+    const hide = $("sd-hide-mean").checked;
+    $("sd-list").classList.toggle("hide-mean", hide);
+    $("sd-list-count").textContent = `${study.label || ""} ${study.list.length}개`.trim();
+    $("sd-list").innerHTML = study.list.map((w, i) => {
+      const m = Store.getMark(w.w);
+      return `<li data-i="${i}" class="${i === study.i ? "cur" : ""}">
+        <button type="button" class="sd-row">
+          <span class="idx num">${i + 1}</span>
+          <span class="txt"><span class="w">${esc(w.w)}</span><span class="m">${esc(w.m || "")}</span></span>
+          <span class="mark-pill ${m || "none"}">${m === "known" ? "오키" : m === "vague" ? "애매" : ""}</span>
+        </button>
+      </li>`;
+    }).join("");
+  }
+  function setStudyView(v, scroll = true) {
+    if (!study) return;
+    study.view = v;
+    document.querySelectorAll("#screen-study [data-sdview]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.sdview === v)));
+    $("sd-card-view").hidden = v !== "card";
+    $("sd-list-view").hidden = v !== "list";
+    if (v === "list") {
+      renderStudyList();
+      if (scroll) {
+        const cur = document.querySelector(`#sd-list li[data-i="${study.i}"]`);
+        if (cur) cur.scrollIntoView({ block: "center" });
+      }
+    }
+  }
+  document.querySelectorAll("#screen-study [data-sdview]").forEach((b) => b.addEventListener("click", () => setStudyView(b.dataset.sdview)));
+  $("sd-hide-mean").addEventListener("change", () => {
+    $("sd-list").classList.toggle("hide-mean", $("sd-hide-mean").checked);
+    try { localStorage.setItem("gmat-voca-hide-mean", $("sd-hide-mean").checked ? "1" : ""); } catch (_) {}
+  });
+  try { $("sd-hide-mean").checked = localStorage.getItem("gmat-voca-hide-mean") === "1"; } catch (_) {}
+  $("sd-list").addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-i]");
+    if (!li || !study) return;
+    const i = Number(li.dataset.i);
+    const dir = i === study.i ? 0 : 0;
+    study.i = i;
+    setStudyView("card");
+    renderStudyCard(false, dir);
+    window.scrollTo(0, 0);
+  });
 
   function endStudy() {
     if (study.key) Store.setStudyPos(study.key, 0);   // 끝까지 봤으면 다음엔 처음부터
-    const flagged = study.list.filter((w) => Store.isFlagged(w.w));
+    const known = study.list.filter((w) => Store.isKnown(w.w));
+    const vague = study.list.filter((w) => Store.isFlagged(w.w));
     $("se-title").textContent = `${study.list.length}개 단어를 다 봤어요`;
-    $("se-sub").textContent = flagged.length
-      ? `헷갈리는 단어 ${flagged.length}개만 한 번 더 보면 오늘 공부는 충분해요.`
-      : "체크한 단어 없이 끝냈어요. 이 감각 그대로 게임으로 확인해 볼까요?";
-    $("se-wrap").hidden = flagged.length === 0;
-    $("se-list").innerHTML = flagged.map((w) =>
+    $("se-sub").textContent = vague.length
+      ? `애매한 단어 ${vague.length}개만 한 번 더 보면 오늘 공부는 충분해요.`
+      : "애매한 단어 없이 끝냈어요. 이 감각 그대로 게임으로 확인해 볼까요?";
+    $("se-ok").textContent = known.length;
+    $("se-vague").textContent = vague.length;
+    $("se-wrap").hidden = vague.length === 0;
+    $("se-list").innerHTML = vague.map((w) =>
       `<li class="has-flag"><div><span class="w">${esc(w.w)}</span><span class="m">${esc(w.m)}</span></div>${flagBtnHtml(w.w)}</li>`).join("");
-    $("se-again").hidden = flagged.length === 0;
-    $("se-game").querySelector("svg").nextSibling.textContent = flagged.length ? "이 단어들로 게임" : "본 단어들로 게임";
-    study.ended = true;
+    $("se-again").hidden = vague.length === 0;
+    $("se-game").querySelector("span").textContent = vague.length ? "애매한 단어로 게임" : "본 단어들로 게임";
     showScreen("studyEnd");
+    checkTierUp();
   }
 
   // 카드: 탭하면 뒤집기, 좌우로 밀면 넘기기
@@ -947,25 +1049,24 @@
     card.addEventListener("pointercancel", () => { down = false; });
     card.addEventListener("click", (e) => {
       const sp = e.target.closest("[data-speak]");
-      if (sp) { e.stopPropagation(); speakWord(study.list[study.i].w); return; }
-      const fl = e.target.closest("[data-flag]");
-      if (fl) { e.stopPropagation(); toggleStudyFlag(); }
+      if (sp) { e.stopPropagation(); speakWord(study.list[study.i].w); }
     });
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); flipStudy(); } });
   })();
 
   $("sd-prev").addEventListener("click", () => studyGo(-1));
   $("sd-next").addEventListener("click", () => studyGo(1));
-  $("sd-flag").addEventListener("click", toggleStudyFlag);
-  $("sd-exit").addEventListener("click", () => { study = null; Store.flush(); showScreen("setup"); refreshSetup(); });
+  $("sd-ok").addEventListener("click", () => markStudy("known"));
+  $("sd-vague").addEventListener("click", () => markStudy("vague"));
+  $("sd-exit").addEventListener("click", () => { study = null; Store.flush(); showScreen("setup"); refreshSetup(); checkTierUp(); });
 
   $("se-again").addEventListener("click", () => {
-    const flagged = study.list.filter((w) => Store.isFlagged(w.w));
-    startStudy(flagged, { label: "헷갈리는 단어", order: "seq", front: study.front });
+    const vague = study.list.filter((w) => Store.isFlagged(w.w));
+    startStudy(vague, { label: "애매한 단어", order: "seq", front: study.front });
   });
   $("se-game").addEventListener("click", () => {
-    const flagged = study.list.filter((w) => Store.isFlagged(w.w));
-    startGameFromWords(flagged.length ? flagged : study.list, settings.mode, flagged.length ? "flag" : null);
+    const vague = study.list.filter((w) => Store.isFlagged(w.w));
+    startGameFromWords(vague.length ? vague : study.list, settings.mode, vague.length ? "flag" : null);
   });
   $("se-home").addEventListener("click", () => { study = null; showScreen("setup"); refreshSetup(); });
 
@@ -992,49 +1093,64 @@
     if (!screens.study.classList.contains("active") || !study) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.target.closest("input, textarea")) return;
+    if (!$("mascot-modal").hidden) return;
     const k = e.key;
+    if (k === "l" || k === "L") { e.preventDefault(); setStudyView(study.view === "list" ? "card" : "list"); return; }
+    if (k === "Escape") { e.preventDefault(); $("sd-exit").click(); return; }
+    if (study.view === "list") return;
     if (k === "ArrowRight") { e.preventDefault(); studyGo(1); }
     else if (k === "ArrowLeft") { e.preventDefault(); studyGo(-1); }
     else if (k === " " || k === "ArrowUp" || k === "ArrowDown") { e.preventDefault(); flipStudy(); }
-    else if (k === "f" || k === "F") { e.preventDefault(); toggleStudyFlag(); }
-    else if (k === "Escape") { e.preventDefault(); $("sd-exit").click(); }
+    else if (k === "1") { e.preventDefault(); markStudy("known"); }
+    else if (k === "2") { e.preventDefault(); markStudy("vague"); }
   });
 
-  /* ---------- 헷갈리는 단어장 ---------- */
+  /* ---------- 단어장 (헷갈리는 단어 / 외운 단어) ---------- */
   let wbOpen = new Set();
+  let wbTab = "vague";
   function wbWords() {
     const q = $("wb-search").value.trim().toLowerCase();
-    let list = Store.flaggedWords().map((f) => ({ ...f, item: byWord.get(f.word) })).filter((f) => f.item);
+    let list = Store.markedWords(wbTab).map((f) => ({ ...f, item: byWord.get(f.word) })).filter((f) => f.item);
     if (q) list = list.filter((f) => f.word.toLowerCase().includes(q) || (f.item.m || "").toLowerCase().includes(q));
     if (settings.wbSort === "day") list.sort((a, b) => a.item.d - b.item.d || a.word.localeCompare(b.word));
     else if (settings.wbSort === "abc") list.sort((a, b) => a.word.localeCompare(b.word));
     return list;
   }
   function updateWordbookHead() {
-    const total = Object.keys(Store.state.flags).length;
-    $("wb-sub").textContent = total
-      ? `체크한 단어 ${total}개. 외운 단어는 깃발을 눌러 빼 주세요.`
-      : "아직 비어 있어요.";
+    const nv = Store.countMarks("vague"), nk = Store.countMarks("known");
+    $("wb-n-vague").textContent = nv;
+    $("wb-n-known").textContent = nk;
+    const total = wbTab === "vague" ? nv : nk;
+    $("wb-sub").textContent = wbTab === "vague"
+      ? (nv ? `애매했던 단어 ${nv}개. 이제 알겠으면 '오키'로 옮겨 주세요.` : "아직 비어 있어요.")
+      : (nk ? `외운 단어 ${nk}개. 다시 헷갈리면 '애매'로 돌려놓으면 돼요.` : "아직 비어 있어요.");
+    document.querySelectorAll("#screen-wordbook [data-wbtab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.wbtab === wbTab)));
     ["wb-study", "wb-game-m", "wb-game-v"].forEach((id) => { $(id).disabled = total === 0; });
   }
   function renderWordbook() {
     updateWordbookHead();
     setPills("wb-sort", settings.wbSort);
     const list = wbWords();
-    const total = Object.keys(Store.state.flags).length;
+    const total = Store.countMarks(wbTab);
     $("wb-empty").hidden = list.length > 0;
     $("wb-empty").textContent = total === 0
-      ? "공부 모드에서 헷갈리는 단어를 체크하면 여기에 쌓여요. 게임 결과 화면에서도 깃발을 눌러 넣을 수 있어요."
+      ? (wbTab === "vague"
+        ? "공부 모드에서 '애매'를 누른 단어가 여기에 쌓여요. 게임 결과 화면에서도 넣을 수 있어요."
+        : "공부 모드에서 '오키'를 누른 단어가 여기에 쌓여요.")
       : "찾는 단어가 없어요.";
     $("wb-list").innerHTML = list.map(({ word, item }) => {
       const open = wbOpen.has(word);
+      const m = Store.getMark(word);
       return `<li class="wb-item${open ? " open" : ""}" data-word="${esc(word)}">
         <div class="wb-row">
           <button type="button" class="wb-main" aria-expanded="${open}">
             <span class="wb-top"><span class="w">${esc(word)}</span><span class="chip">Day ${item.d}</span></span>
             <span class="m">${esc(item.m || "")}</span>
           </button>
-          ${flagBtnHtml(word)}
+          <div class="wb-marks">
+            <button type="button" class="mark-mini ok${m === "known" ? " on" : ""}" data-wbmark="known" aria-pressed="${m === "known"}">오키</button>
+            <button type="button" class="mark-mini vague${m === "vague" ? " on" : ""}" data-wbmark="vague" aria-pressed="${m === "vague"}">애매</button>
+          </div>
         </div>
         <div class="wb-detail"${open ? "" : " hidden"}>
           <p class="pron-line left"><span class="pron">${esc(item.p || "")}</span>
@@ -1045,13 +1161,17 @@
       </li>`;
     }).join("");
   }
-  function openWordbook() {
+  function openWordbook(tab) {
     wbOpen = new Set();
+    wbTab = tab || (Store.countMarks("vague") || !Store.countMarks("known") ? "vague" : "known");
     $("wb-search").value = "";
     showScreen("wordbook");
     renderWordbook();
   }
-  $("btn-wordbook").addEventListener("click", openWordbook);
+  $("btn-wordbook").addEventListener("click", () => openWordbook());
+  document.querySelectorAll("#screen-wordbook [data-wbtab]").forEach((b) => b.addEventListener("click", () => {
+    wbTab = b.dataset.wbtab; wbOpen = new Set(); renderWordbook();
+  }));
   $("wb-back").addEventListener("click", () => { showScreen("setup"); refreshSetup(); });
   $("wb-search").addEventListener("input", renderWordbook);
   $("wb-sort").addEventListener("click", (e) => {
@@ -1064,6 +1184,19 @@
   $("wb-list").addEventListener("click", (e) => {
     const sp = e.target.closest("[data-speak-word]");
     if (sp) { speakWord(sp.dataset.speakWord); return; }
+    const mk = e.target.closest("[data-wbmark]");
+    if (mk) {
+      // 탭을 옮기더라도 목록은 다시 열 때까지 그대로 둬서 실수로 눌러도 되돌릴 수 있게
+      const li = mk.closest(".wb-item");
+      const m = Store.toggleMark(li.dataset.word, mk.dataset.wbmark);
+      li.querySelectorAll("[data-wbmark]").forEach((b) => {
+        const on = b.dataset.wbmark === m;
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+      li.classList.toggle("moved", m !== wbTab);
+      return;
+    }
     const main = e.target.closest(".wb-main");
     if (!main) return;
     const li = main.closest(".wb-item");
@@ -1074,10 +1207,9 @@
     main.setAttribute("aria-expanded", String(open));
     li.querySelector(".wb-detail").hidden = !open;
   });
-  const wbItems = () => wbWords().map((f) => f.item);
+  const wbItems = () => wbWords().map((f) => f.item).filter((it) => Store.getMark(it.w) === wbTab);
   $("wb-study").addEventListener("click", () => {
-    const items = wbItems();
-    startStudy(items, { label: "헷갈리는 단어장", order: settings.stOrder, front: settings.stFront });
+    startStudy(wbItems(), { label: MARK_LABEL[wbTab], order: settings.stOrder, front: settings.stFront });
   });
   $("wb-game-m").addEventListener("click", () => startGameFromWords(wbItems(), "m", "flag"));
   $("wb-game-v").addEventListener("click", () => startGameFromWords(wbItems(), "v", "flag"));

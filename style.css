@@ -15,6 +15,8 @@
   --tint: rgba(61, 220, 132, .12);
   --bad: #e5786d;
   --bad-tint: rgba(229, 120, 109, .12);
+  --amber: #e5c26d;
+  --amber-tint: rgba(229, 194, 109, .13);
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -30,6 +32,8 @@
   --tint: rgba(31, 157, 92, .09);
   --bad: #c9584c;
   --bad-tint: rgba(201, 88, 76, .09);
+  --amber: #b08a1e;
+  --amber-tint: rgba(176, 138, 30, .1);
   color-scheme: light;
 }
 
@@ -392,6 +396,10 @@ kbd {
   border-radius: 999px; padding: 0 6px 0 4px; line-height: 16px; font-size: .7rem;
 }
 .day-chip .fl .ic { width: 10px; height: 10px; }
+.day-chip .fl { border-color: var(--amber); color: var(--amber); }
+.day-chip .prog { width: 70%; height: 3px; border-radius: 2px; background: var(--line); margin-top: 5px; overflow: hidden; }
+.day-chip .prog i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .3s ease; }
+.day-chip.done .n::after { content: " ✓"; color: var(--primary); }
 .day-chip .fl b { font-weight: 700; }
 .day-grid { padding-top: 6px; }
 
@@ -476,14 +484,17 @@ kbd {
 /* =========================================================
    공부 모드
    ========================================================= */
-.sd-progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
+.sd-top { display: grid; gap: 10px; margin-bottom: 14px; }
+.view-seg.small { margin-bottom: 0; }
+.view-seg.small button { padding: 8px; font-size: .9rem; }
+.sd-progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
 .sd-progress i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .2s ease; }
 #sd-label { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .study-card { cursor: pointer; touch-action: pan-y; user-select: none; -webkit-user-select: none; outline: none; }
 .study-card:focus-visible .face { border-color: var(--primary); }
 .study-card .face { padding-top: 18px; }
-.study-card .flag-btn { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.study-card .back .word.small { padding-right: 110px; }
 .study-card .face-body { padding-top: 4px; }
 .sd-center { margin: auto 0; text-align: center; padding: 10px 6px; }
 .sd-mean { font-size: 1.15rem; line-height: 1.6; margin: 0; font-weight: 600; }
@@ -491,7 +502,19 @@ kbd {
 .study-card .back .word.small { margin-top: 0; padding-right: 44px; }
 .pron-line.left { justify-content: flex-start; margin-top: 4px; }
 
-.study-nav { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 8px; margin-top: 32px; }
+.study-card { --card-h: 480px; }
+.mark-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.mark-btn { padding: 13px 10px; font-size: 1rem; }
+.btn.ghost.mark-btn.ok.on { border-color: var(--primary); background: var(--tint); color: var(--primary); }
+.btn.ghost.mark-btn.vague.on { border-color: var(--amber); background: var(--amber-tint); color: var(--amber); }
+.btn.ghost.mark-btn.vague:hover:not(:disabled) { border-color: var(--amber); }
+.mark-tag {
+  position: absolute; top: 14px; right: 14px; z-index: 2;
+  font-size: .74rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid;
+}
+.mark-tag.known { color: var(--primary); border-color: var(--primary); background: var(--tint); }
+.mark-tag.vague { color: var(--amber); border-color: var(--amber); background: var(--amber-tint); }
+.study-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 44px; }
 .study-nav .btn { padding: 12px 10px; }
 .study-nav .flag-main.on { border-color: var(--primary); background: var(--tint); color: var(--primary); }
 .study-nav .flag-main.on .ic { fill: currentColor; fill-opacity: .35; }
@@ -553,3 +576,91 @@ kbd {
 
 #se-wrap { text-align: left; margin-top: 18px; }
 #se-wrap h2 { margin: 4px 0 8px; }
+
+/* ---------- 공부 리스트 ---------- */
+.sd-list-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; font-size: .9rem; }
+.toggle.small { margin-top: 0; font-size: .88rem; }
+.sd-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.sd-list li + li { border-top: 1px solid var(--line); }
+.sd-row { width: 100%; display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; text-align: left; background: none; border: 0; padding: 10px 12px; }
+.sd-row:hover { background: var(--surface-2); }
+.sd-list li.cur .sd-row { background: var(--tint); box-shadow: inset 3px 0 0 var(--primary); }
+.sd-row .idx { font-size: .74rem; color: var(--text-soft); text-align: right; }
+.sd-row .txt { display: grid; gap: 1px; min-width: 0; }
+.sd-row .w { font-family: var(--mono); font-weight: 700; }
+.sd-row .m { font-size: .86rem; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: filter .15s ease; }
+.sd-list.hide-mean .m { filter: blur(5px); user-select: none; }
+.sd-list.hide-mean .sd-row:hover .m { filter: none; }
+.mark-pill { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; min-width: 42px; text-align: center; }
+.mark-pill.known { color: var(--primary); border-color: var(--primary); background: var(--tint); }
+.mark-pill.vague { color: var(--amber); border-color: var(--amber); background: var(--amber-tint); }
+.mark-pill.none { border-color: transparent; }
+
+/* ---------- 단어장 오키/애매 ---------- */
+#screen-wordbook .view-seg { margin-top: 16px; }
+#screen-wordbook .view-seg b { margin-left: 2px; }
+#screen-wordbook [data-wbtab="vague"][aria-selected="true"] { background: var(--amber-tint); border-color: var(--amber); color: var(--amber); }
+.wb-marks { display: flex; gap: 4px; }
+.mark-mini { font-size: .76rem; font-weight: 700; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line-strong); background: transparent; color: var(--text-soft); }
+.mark-mini.ok.on { color: var(--primary); border-color: var(--primary); background: var(--tint); }
+.mark-mini.vague.on { color: var(--amber); border-color: var(--amber); background: var(--amber-tint); }
+.wb-item.moved { opacity: .5; }
+
+/* ---------- 내 기록: 연속 학습 캐릭터 ---------- */
+.streak-card {
+  display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center;
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px 12px 12px; margin-bottom: 8px;
+}
+.streak-sprite {
+  width: 76px; height: 96px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2);
+  display: grid; place-items: center; padding: 4px;
+}
+.streak-sprite:hover { border-color: var(--primary); }
+.streak-sprite svg { width: 56px; height: 80px; image-rendering: pixelated; }
+.streak-info { min-width: 0; }
+.streak-top { display: flex; align-items: center; gap: 8px; font-family: "Galmuri11", var(--mono); font-size: .82rem; }
+.streak-lv { color: var(--primary); }
+.streak-name { color: var(--text-soft); }
+.streak-days { margin-top: 2px; font-size: .9rem; color: var(--text-soft); }
+.streak-days b { font-size: 1.6rem; font-weight: 800; color: var(--text); margin-right: 2px; }
+.streak-bar { height: 6px; background: var(--line); margin-top: 6px; overflow: hidden; }
+.streak-bar i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .3s ease; }
+.streak-next { font-family: "Galmuri11", var(--mono); font-size: .74rem; color: var(--text-soft); margin-top: 5px; }
+.kpis.three { grid-template-columns: repeat(3, 1fr); }
+.stats.two { grid-template-columns: repeat(2, 1fr); }
+
+/* ---------- 변신 화면 ---------- */
+.mascot-box { max-width: 360px; text-align: center; }
+.overlay-box .mascot-kicker { font-family: "Galmuri11", var(--mono); font-size: 1.3rem; letter-spacing: .04em; color: var(--primary); margin: 0 0 12px !important; }
+.mascot-stage {
+  position: relative; width: 180px; height: 250px; margin: 0 auto; overflow: hidden;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); display: grid; place-items: center;
+}
+.mascot-stage svg { width: 150px; height: 212px; image-rendering: pixelated; }
+.mascot-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.mascot-stage.pop svg { animation: mHop .7s ease; }
+.mascot-stage.pop .mascot-flash { animation: mFlash .7s ease; }
+@keyframes mHop { 0% { transform: scale(.8); } 50% { transform: scale(1.08) translateY(-8px); } 100% { transform: none; } }
+@keyframes mFlash { 0% { opacity: .9; } 100% { opacity: 0; } }
+.mascot-dialog {
+  font-family: "Galmuri11", var(--mono); text-align: left; line-height: 1.7; font-size: .9rem;
+  border: 2px solid var(--primary); border-radius: 4px; padding: 10px 12px; margin: 14px 0 12px; background: var(--surface-2);
+}
+.mascot-dialog p { margin: 0 !important; color: var(--text) !important; }
+.mascot-dialog .say { color: var(--text-soft) !important; }
+.mascot-tiers { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 16px; }
+.mascot-tiers span { font-family: "Galmuri11", var(--mono); font-size: .7rem; border: 1px solid var(--line); padding: 2px 6px; color: var(--text-soft); }
+.mascot-tiers span.got { border-color: var(--primary); color: var(--primary); }
+.mascot-tiers span.cur { background: var(--tint); }
+
+@media (max-width: 560px) {
+  .study-card { --card-h: clamp(380px, 58svh, 560px); }
+  .study-nav { margin-top: 36px; }
+  .kpis.three { grid-template-columns: repeat(3, 1fr); }
+  .kpis.three .kpi { grid-template-columns: 1fr; text-align: center; justify-items: center; padding: 10px 6px; }
+  .kpis.three .kpi .ic { grid-row: auto; }
+  .wb-marks { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot-stage.pop svg, .mascot-stage.pop .mascot-flash { animation: none; }
+}

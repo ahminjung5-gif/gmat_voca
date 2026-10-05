@@ -79,6 +79,7 @@ create table if not exists public.bookmarks (
   user_id uuid not null references auth.users (id) on delete cascade,
   word text not null,
   created_at timestamptz not null default now(),
+  status text not null default 'vague' check (status in ('known', 'vague')),  -- known=외운 단어, vague=헷갈리는 단어
   primary key (user_id, word)
 );
 

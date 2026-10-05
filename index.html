@@ -17,6 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -57,6 +58,10 @@
       <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
       <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
       <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></symbol>
+      <symbol id="i-book-check" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="m9 9.5 2 2 4-4"/></symbol>
     </defs>
   </svg>
 
@@ -88,20 +93,27 @@
           <h2 id="records-title">내 기록</h2>
           <span id="sync-status" class="sync"></span>
         </div>
-        <div class="kpis">
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-flame"/></svg><span><b id="k-streak" class="num">0</b>일</span><small>연속 학습</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 단어</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span><b id="k-viewed" class="num">0</b>장</span><small>오늘 본 카드</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><span><b id="k-flag" class="num">0</b>개</span><small>헷갈리는 단어</small></div>
+        <div class="streak-card">
+          <button type="button" class="streak-sprite" id="streak-sprite" aria-label="변신 단계 보기"></button>
+          <div class="streak-info">
+            <div class="streak-top"><span class="streak-lv" id="streak-lv">LV.0</span><span class="streak-name" id="streak-name"></span></div>
+            <div class="streak-days"><b id="k-streak" class="num">0</b>일 연속 학습</div>
+            <div class="streak-bar"><i id="streak-bar"></i></div>
+            <div class="streak-next" id="streak-next"></div>
+          </div>
         </div>
-        <div class="activity" id="activity" aria-label="최근 14일 학습량"></div>
+        <div class="kpis three">
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-book-check"/></svg><span><b id="k-known" class="num">0</b>개</span><small>오늘 외운 단어</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 단어</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><span><b id="k-flag" class="num">0</b>개</span><small>헷갈리는 단어</small></div>
+        </div>
         <div class="records-foot">
           <details class="recent">
             <summary>최근 학습 <span id="recent-count" class="muted"></span></summary>
             <ul id="recent-list" class="recent-list"></ul>
           </details>
           <div class="records-btns">
-            <button type="button" id="btn-wordbook" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg>헷갈리는 단어장 <b id="wb-count" class="num">0</b></button>
+            <button type="button" id="btn-wordbook" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg>단어장 열기</button>
           </div>
         </div>
         <p id="login-nudge" class="nudge" hidden></p>
@@ -148,6 +160,7 @@
           <div class="pills" id="st-filter" role="radiogroup" aria-label="볼 단어">
             <button type="button" data-v="all" role="radio">전체</button>
             <button type="button" data-v="flag" role="radio">헷갈리는 단어 <span class="num"></span></button>
+            <button type="button" data-v="unknown" role="radio">안 외운 단어 <span class="num"></span></button>
           </div>
         </div>
         <div class="opt-group">
@@ -243,7 +256,7 @@
       </div>
     </section>
 
-    <!-- ========== 공부 모드: 카드 ========== -->
+    <!-- ========== 공부 모드 ========== -->
     <section id="screen-study" class="screen" aria-label="공부 모드">
       <div class="hud">
         <button type="button" id="sd-exit" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span>나가기</span></button>
@@ -256,27 +269,51 @@
           </button>
         </div>
       </div>
-      <div class="sd-progress" aria-hidden="true"><i id="sd-bar"></i></div>
+      <div class="sd-top">
+        <div class="view-seg small" role="tablist" aria-label="보기 방식">
+          <button type="button" role="tab" data-sdview="card" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>카드</button>
+          <button type="button" role="tab" data-sdview="list" aria-selected="false"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>리스트</button>
+        </div>
+        <div class="sd-progress" aria-hidden="true"><i id="sd-bar"></i></div>
+      </div>
 
-      <div class="card-wrap" id="sd-wrap">
-        <div id="sd-card" class="card study-card" tabindex="0" aria-label="카드. 누르면 뒤집혀요">
-          <div class="face front">
-            <button type="button" class="icon-btn flag-btn" data-flag aria-label="헷갈려요 체크"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg></button>
-            <div class="face-body" id="sd-front"></div>
-          </div>
-          <div class="face back">
-            <button type="button" class="icon-btn flag-btn" data-flag aria-label="헷갈려요 체크"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg></button>
-            <div class="face-body" id="sd-back"></div>
+      <!-- 카드 보기 -->
+      <div id="sd-card-view">
+        <div class="card-wrap" id="sd-wrap">
+          <div id="sd-card" class="card study-card" tabindex="0" aria-label="카드. 누르면 뒤집혀요">
+            <div class="face front">
+              <span class="mark-tag" data-marktag hidden></span>
+              <div class="face-body" id="sd-front"></div>
+            </div>
+            <div class="face back">
+              <span class="mark-tag" data-marktag hidden></span>
+              <div class="face-body" id="sd-back"></div>
+            </div>
           </div>
         </div>
+        <div class="mark-row">
+          <button type="button" id="sd-ok" class="btn ghost mark-btn ok"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>오키</button>
+          <button type="button" id="sd-vague" class="btn ghost mark-btn vague"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>애매</button>
+        </div>
+        <div class="study-nav">
+          <button type="button" id="sd-prev" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>이전</button>
+          <button type="button" id="sd-next" class="btn ghost"><span>다음</span><svg class="ic" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
+        </div>
+        <p class="study-tip">카드를 누르면 뒤집혀요. 좌우로 밀어서 넘길 수 있어요. <span class="kbd-tip">← → 넘기기, 스페이스 뒤집기, 1 오키, 2 애매, L 리스트</span></p>
       </div>
 
-      <div class="study-nav">
-        <button type="button" id="sd-prev" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>이전</button>
-        <button type="button" id="sd-flag" class="btn ghost flag-main"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><span>헷갈려요</span></button>
-        <button type="button" id="sd-next" class="btn ghost"><span>다음</span><svg class="ic" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
+      <!-- 리스트 보기 -->
+      <div id="sd-list-view" hidden>
+        <div class="sd-list-tools">
+          <span id="sd-list-count" class="muted"></span>
+          <label class="toggle small">
+            <input type="checkbox" id="sd-hide-mean" />
+            <span class="toggle-ui" aria-hidden="true"></span>
+            <span>뜻 가리기</span>
+          </label>
+        </div>
+        <ol id="sd-list" class="sd-list"></ol>
       </div>
-      <p class="study-tip">카드를 누르면 뒤집혀요. 좌우로 밀어서 넘길 수 있어요. <span class="kbd-tip">← → 넘기기, 스페이스 뒤집기, F 체크</span></p>
     </section>
 
     <!-- ========== 공부 모드: 끝 ========== -->
@@ -285,19 +322,23 @@
         <svg class="ic result-ic" aria-hidden="true"><use href="#i-check"/></svg>
         <h1 id="se-title"></h1>
         <p id="se-sub" class="lede"></p>
+        <div class="stats two">
+          <div class="stat main"><span id="se-ok" class="stat-num num">0</span><span class="stat-label">오키 (외운 단어)</span></div>
+          <div class="stat"><span id="se-vague" class="stat-num num">0</span><span class="stat-label">애매 (헷갈리는 단어)</span></div>
+        </div>
         <div id="se-wrap">
-          <h2>이번에 체크한 단어</h2>
+          <h2>이번에 애매했던 단어</h2>
           <ul id="se-list" class="wrong-list"></ul>
         </div>
         <div class="result-actions">
-          <button type="button" id="se-again" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg>헷갈리는 단어만 다시 보기</button>
-          <button type="button" id="se-game" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg>이 단어들로 게임</button>
+          <button type="button" id="se-again" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>애매한 단어만 다시 보기</button>
+          <button type="button" id="se-game" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg><span>이 단어들로 게임</span></button>
           <button type="button" id="se-home" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>처음으로</button>
         </div>
       </div>
     </section>
 
-    <!-- ========== 헷갈리는 단어장 ========== -->
+    <!-- ========== 단어장 ========== -->
     <section id="screen-wordbook" class="screen" aria-labelledby="wb-title">
       <div class="hud">
         <button type="button" id="wb-back" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span>뒤로</span></button>
@@ -309,8 +350,12 @@
         </div>
       </div>
       <div class="wb-head">
-        <h1 id="wb-title">헷갈리는 단어장</h1>
+        <h1 id="wb-title">단어장</h1>
         <p id="wb-sub" class="lede"></p>
+      </div>
+      <div class="view-seg" role="tablist" aria-label="단어장 종류">
+        <button type="button" role="tab" data-wbtab="vague" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>헷갈리는 단어 <b class="num" id="wb-n-vague">0</b></button>
+        <button type="button" role="tab" data-wbtab="known" aria-selected="false"><svg class="ic" aria-hidden="true"><use href="#i-book-check"/></svg>외운 단어 <b class="num" id="wb-n-known">0</b></button>
       </div>
       <div class="wb-actions">
         <button type="button" id="wb-study" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>카드로 보기</button>
@@ -369,6 +414,20 @@
         </div>
       </div>
     </div>
+    <!-- ========== 변신! ========== -->
+    <div id="mascot-modal" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="mascot-line">
+      <div class="overlay-box mascot-box">
+        <p class="mascot-kicker" id="mascot-kicker">TRANSFORM!</p>
+        <div class="mascot-stage" id="mascot-stage"><div id="mascot-sprite"></div><div class="mascot-flash"></div></div>
+        <div class="mascot-dialog">
+          <p id="mascot-line"></p>
+          <p id="mascot-say" class="say"></p>
+        </div>
+        <div class="mascot-tiers" id="mascot-tiers"></div>
+        <button type="button" id="mascot-ok" class="btn primary wide">계속하기</button>
+      </div>
+    </div>
+
     <!-- ========== 로그인 ========== -->
     <div id="login-modal" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="login-title">
       <div class="overlay-box left">
@@ -415,6 +474,7 @@
   <script src="config.js"></script>
   <script src="data/words.js"></script>
   <script src="store.js"></script>
+  <script src="mascot.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

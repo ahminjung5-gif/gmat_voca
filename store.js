@@ -23,7 +23,7 @@
     stats: {},          // "m:word" -> { c, w, s, last, note }
     daily: {},          // "2026-10-05" -> { n, c, sec }
     sessions: [],       // 최근 학습 기록 (최신순)
-    flags: {},          // 헷갈리는 단어장: word -> 체크한 시각
+    marks: {},          // 단어 체크: word -> { s: "known"(오키=외운 단어) | "vague"(애매=헷갈리는 단어), at: 체크한 시각 }
     studyPos: {},       // 공부 모드 이어보기: key -> 위치
     needsMigration: false, // Supabase에 새 SQL(공부 모드용)이 아직 없으면 true
     sync: hasCloud ? "idle" : "local",   // local | idle | saving | error
@@ -46,7 +46,7 @@
     try {
       localStorage.setItem(lsKey(), JSON.stringify({
         profile: state.profile, stats: state.stats, daily: state.daily, sessions: state.sessions.slice(0, 60),
-        flags: state.flags, studyPos: state.studyPos,
+        marks: state.marks, studyPos: state.studyPos,
         pendingStudySync: !!(state.user && state.needsMigration) || undefined,
       }));
     } catch (_) {}
@@ -62,7 +62,7 @@
     state.stats = (d && d.stats) || {};
     state.daily = (d && d.daily) || {};
     state.sessions = (d && d.sessions) || [];
-    state.flags = (d && d.flags) || {};
+    state.marks = normMarks(d && (d.marks || d.flags));
     state.studyPos = (d && d.studyPos) || {};
   }
 
@@ -92,9 +92,10 @@
   }
 
   // 공부 모드에서 카드 한 장을 본 것 (연속 학습일에 포함)
-  function recordView() {
+  function recordView(onlyMarkActive) {
     const dk = dayKey();
     const day = state.daily[dk] || { n: 0, c: 0, sec: 0, v: 0 };
+    if (onlyMarkActive) { if ((day.v || 0) > 0 || day.n > 0) return; }
     day.v = (day.v || 0) + 1;
     state.daily[dk] = day;
     dirtyDays.add(dk);
@@ -103,20 +104,43 @@
   }
 
   // 헷갈리는 단어 체크 / 해제
-  const dirtyFlags = new Map();   // word -> true(추가) / false(삭제)
-  function isFlagged(word) { return !!state.flags[word]; }
-  function toggleFlag(word, on) {
-    const next = on === undefined ? !state.flags[word] : !!on;
-    if (next) state.flags[word] = new Date().toISOString();
-    else delete state.flags[word];
-    dirtyFlags.set(word, next);
+  // 예전 형식(word -> 시각 문자열 = 헷갈리는 단어)도 읽을 수 있게 변환
+  function normMarks(m) {
+    const out = {};
+    Object.entries(m || {}).forEach(([w, v]) => {
+      if (typeof v === "string") out[w] = { s: "vague", at: v };
+      else if (v && (v.s === "known" || v.s === "vague")) out[w] = { s: v.s, at: v.at || new Date().toISOString() };
+    });
+    return out;
+  }
+  const dirtyMarks = new Set();
+  function getMark(word) { return state.marks[word] ? state.marks[word].s : null; }
+  function isFlagged(word) { return getMark(word) === "vague"; }
+  function isKnown(word) { return getMark(word) === "known"; }
+  // status: "known" | "vague" | null(해제)
+  function setMark(word, status) {
+    if (status) state.marks[word] = { s: status, at: new Date().toISOString() };
+    else delete state.marks[word];
+    dirtyMarks.add(word);
+    if (status) recordView(true);   // 체크도 공부한 것으로 침
     saveLocal();
     scheduleFlush();
     emit();
-    return next;
+    return status;
   }
-  function flaggedWords() {
-    return Object.entries(state.flags).sort((a, b) => (a[1] < b[1] ? 1 : -1)).map(([w, at]) => ({ word: w, at }));
+  // 같은 버튼을 다시 누르면 해제
+  function toggleMark(word, status) { return setMark(word, getMark(word) === status ? null : status); }
+  function toggleFlag(word) { return toggleMark(word, "vague") === "vague"; }
+  function markedWords(status) {
+    return Object.entries(state.marks).filter(([, v]) => v.s === status)
+      .sort((a, b) => (a[1].at < b[1].at ? 1 : -1)).map(([w, v]) => ({ word: w, at: v.at }));
+  }
+  function countMarks(status) { let n = 0; for (const k in state.marks) if (state.marks[k].s === status) n++; return n; }
+  function todayKnown() {
+    const t = dayKey();
+    let n = 0;
+    for (const k in state.marks) { const v = state.marks[k]; if (v.s === "known" && dayKey(new Date(v.at)) === t) n++; }
+    return n;
   }
 
   // 공부 모드 이어보기 위치
@@ -158,7 +182,7 @@
   async function flush() {
     clearTimeout(flushTimer);
     if (!state.user || !sb) return;
-    if (!dirtyStats.size && !dirtyDays.size && !dirtyFlags.size && !dirtyPos.size) return;
+    if (!dirtyStats.size && !dirtyDays.size && !dirtyMarks.size && !dirtyPos.size) return;
     const uid = state.user.id;
     const statRows = [...dirtyStats].map((k) => {
       const i = k.indexOf(":");
@@ -172,11 +196,11 @@
       return row;
     });
     const flagAdds = [], flagDels = [];
-    dirtyFlags.forEach((on, w) => (on ? flagAdds : flagDels).push(w));
+    dirtyMarks.forEach((w) => (state.marks[w] ? flagAdds : flagDels).push(w));
     const posRows = [...dirtyPos].map((k) => ({ user_id: uid, key: k, idx: state.studyPos[k] || 0, updated_at: new Date().toISOString() }));
     const extraOk = !state.needsMigration;
     dirtyStats.clear(); dirtyDays.clear();
-    if (extraOk) { dirtyFlags.clear(); dirtyPos.clear(); }
+    if (extraOk) { dirtyMarks.clear(); dirtyPos.clear(); }
     setSync("saving");
     try {
       for (let i = 0; i < statRows.length; i += 500) {
@@ -188,7 +212,7 @@
         if (error) throw error;
       }
       if (extraOk && flagAdds.length) {
-        const rows = flagAdds.filter((w) => state.flags[w]).map((w) => ({ user_id: uid, word: w, created_at: state.flags[w] }));
+        const rows = flagAdds.filter((w) => state.marks[w]).map((w) => ({ user_id: uid, word: w, created_at: state.marks[w].at, status: state.marks[w].s }));
         if (rows.length) {
           const { error } = await sb.from("bookmarks").upsert(rows, { onConflict: "user_id,word" });
           if (error) throw error;
@@ -208,8 +232,7 @@
       // 실패한 건 다시 표시해 두고 나중에 재시도
       statRows.forEach((r) => dirtyStats.add(`${r.mode}:${r.word}`));
       dayRows.forEach((r) => dirtyDays.add(r.day));
-      flagAdds.forEach((w) => { if (!dirtyFlags.has(w)) dirtyFlags.set(w, true); });
-      flagDels.forEach((w) => { if (!dirtyFlags.has(w)) dirtyFlags.set(w, false); });
+      flagAdds.concat(flagDels).forEach((w) => dirtyMarks.add(w));
       posRows.forEach((r) => dirtyPos.add(r.key));
       setSync("error");
       clearTimeout(flushTimer);
@@ -242,7 +265,7 @@
     // 공부 모드용 테이블 (아직 SQL을 안 돌렸으면 없어도 나머지는 동작)
     let flagRows = [], posRows = [];
     try {
-      flagRows = await fetchAll("bookmarks", "word,created_at");
+      flagRows = await fetchAll("bookmarks", "word,created_at,status");
       const { data, error } = await sb.from("study_progress").select("key,idx");
       if (error) throw error;
       posRows = data || [];
@@ -264,18 +287,18 @@
     dayRows.forEach((r) => { state.daily[r.day] = { n: r.answered, c: r.correct, sec: r.seconds, v: r.viewed || 0 }; });
     if (!state.needsMigration) {
       const cached = loadLocal();
-      state.flags = {};
-      flagRows.forEach((r) => { state.flags[r.word] = r.created_at; });
+      state.marks = {};
+      flagRows.forEach((r) => { state.marks[r.word] = { s: r.status === "known" ? "known" : "vague", at: r.created_at }; });
       state.studyPos = {};
       posRows.forEach((r) => { state.studyPos[r.key] = r.idx; });
       // SQL을 실행하기 전에 이 기기에만 저장해 둔 단어장이 있으면 올림
       if (cached && cached.pendingStudySync) {
-        Object.entries(cached.flags || {}).forEach(([w, at]) => { if (!state.flags[w]) { state.flags[w] = at; dirtyFlags.set(w, true); } });
+        Object.entries(normMarks(cached.marks || cached.flags)).forEach(([w, v]) => { if (!state.marks[w]) { state.marks[w] = v; dirtyMarks.add(w); } });
         Object.entries(cached.studyPos || {}).forEach(([k, i]) => { if (!(k in state.studyPos)) { state.studyPos[k] = i; dirtyPos.add(k); } });
       }
     } else {
       const cached = loadLocal();
-      state.flags = (cached && cached.flags) || {};
+      state.marks = normMarks(cached && (cached.marks || cached.flags));
       state.studyPos = (cached && cached.studyPos) || {};
     }
     state.sessions = (sessRows || []).map((r) => ({
@@ -285,10 +308,11 @@
 
     // 처음 로그인했고 로그인 전에 공부한 기록이 있으면 계정으로 옮김
     // 로그인 전에 체크한 단어장도 계정에 합치기
-    if (guest && guest.flags && Object.keys(guest.flags).length) {
-      Object.entries(guest.flags).forEach(([w, at]) => { if (!state.flags[w]) { state.flags[w] = at; dirtyFlags.set(w, true); } });
+    const guestMarks = guest ? normMarks(guest.marks || guest.flags) : {};
+    if (Object.keys(guestMarks).length) {
+      Object.entries(guestMarks).forEach(([w, v]) => { if (!state.marks[w]) { state.marks[w] = v; dirtyMarks.add(w); } });
       Object.entries(guest.studyPos || {}).forEach(([k, i]) => { if (!(k in state.studyPos)) { state.studyPos[k] = i; dirtyPos.add(k); } });
-      guest.flags = {}; guest.studyPos = {};
+      guest.flags = {}; guest.marks = {}; guest.studyPos = {};
       try { localStorage.setItem("gmat-voca-data:guest", JSON.stringify(guest)); } catch (_) {}
     }
     if (cloudEmpty && guest && guest.stats && Object.keys(guest.stats).length) {
@@ -311,7 +335,7 @@
     }
     saveLocal();
     setSync("idle");
-    if (dirtyFlags.size || dirtyPos.size) flush();
+    if (dirtyMarks.size || dirtyPos.size) flush();
   }
 
   async function onUser(user) {
@@ -363,7 +387,8 @@
   // 먼저 출제할 단어일수록 큰 값: 헷갈리는 단어 > 자주 틀린 단어 > 나머지(무작위)
   function priority(mode, word) {
     const s = wordStat(mode, word);
-    return (state.flags[word] ? 4 : 0) + (s ? Math.min(s.w, 4) * 0.8 : 0);
+    const m = getMark(word);
+    return (m === "vague" ? 4 : m === "known" ? -2 : 0) + (s ? Math.min(s.w, 4) * 0.8 : 0);
   }
 
   function streakDays() {
@@ -373,6 +398,17 @@
     const active = (x) => x && (x.n > 0 || (x.v || 0) > 0);
     while (active(state.daily[dayKey(d)])) { n++; d.setDate(d.getDate() - 1); }
     return n;
+  }
+
+  function bestStreak() {
+    const days = Object.keys(state.daily).filter((k) => { const x = state.daily[k]; return x && (x.n > 0 || (x.v || 0) > 0); }).sort();
+    let best = 0, cur = 0, prev = null;
+    days.forEach((k) => {
+      const d = new Date(k + "T00:00:00");
+      if (prev) { const diff = Math.round((d - prev) / 86400000); cur = diff === 1 ? cur + 1 : 1; } else cur = 1;
+      best = Math.max(best, cur); prev = d;
+    });
+    return Math.max(best, streakDays());
   }
 
   function lastDays(count) {
@@ -406,7 +442,8 @@
     state, hasCloud,
     init, onChange: (fn) => listeners.add(fn),
     recordAnswer, recordSession, recordView, flush,
-    isFlagged, toggleFlag, flaggedWords, getStudyPos, setStudyPos,
+    getMark, setMark, toggleMark, isFlagged, isKnown, toggleFlag, markedWords, countMarks, todayKnown, bestStreak,
+    getStudyPos, setStudyPos,
     signInGoogle, signInEmail, signOut, setNickname,
     wordStat, priority, streakDays, lastDays, dayKey,
   };
