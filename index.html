@@ -3,10 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>GMAT VOCA 플래시카드</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>" />
+  <title>GMAT VOCA</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ddc84' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='1' width='22' height='22' rx='5' fill='%230a0f0c' stroke='none'/><polyline points='6 16 10 12 6 8'/><line x1='12' x2='18' y1='16' y2='16'/></svg>" />
   <script>
-    // 테마를 먼저 적용해 깜빡임 방지
     (function () {
       var t = null;
       try { t = localStorage.getItem("gmat-voca-theme"); } catch (e) {}
@@ -15,19 +14,51 @@
     })();
   </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- 아이콘 (stroke 스타일) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><polygon points="7 4 19 12 7 20 7 4"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5Z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.4 18.4a9 9 0 0 0 0-12.7"/></symbol>
+      <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+      <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M6 9v6"/><path d="M8.7 7.3l6.6 3.4"/><path d="M8.7 16.7l6.6-3.4"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-timer" viewBox="0 0 24 24"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+      <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></symbol>
+      <symbol id="i-pause-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/></symbol>
+    </defs>
+  </svg>
+
   <main id="app">
 
     <!-- ========== 1. 설정 화면 ========== -->
     <section id="screen-setup" class="screen active" aria-labelledby="setup-title">
       <header class="setup-head">
         <div>
-          <h1 id="setup-title"><span class="logo" aria-hidden="true">🃏</span>GMAT VOCA</h1>
-          <p class="lede">Day와 학습 방법을 고르고 시작해요. 목숨은 3개, 단어마다 60초!</p>
+          <h1 id="setup-title"><svg class="ic logo" aria-hidden="true"><use href="#i-terminal"/></svg>GMAT VOCA<span class="cursor" aria-hidden="true"></span></h1>
+          <p class="lede">오늘 볼 Day를 고르세요. 하루 한 묶음씩 쌓으면, 그게 점수가 됩니다.</p>
         </div>
-        <button type="button" class="theme-btn" data-theme-toggle aria-label="테마 바꾸기"></button>
+        <button type="button" class="icon-btn lg" data-theme-toggle aria-label="테마 바꾸기">
+          <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+          <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        </button>
       </header>
 
       <div class="panel">
@@ -47,17 +78,17 @@
           <label class="mode">
             <input type="radio" name="mode" value="m" checked />
             <span class="mode-body">
-              <span class="mode-emoji" aria-hidden="true">📖</span>
+              <svg class="ic mode-ic" aria-hidden="true"><use href="#i-book"/></svg>
               <strong>뜻 맞히기</strong>
-              <span class="mode-desc">단어와 발음을 보고 알맞은 뜻을 골라요.</span>
+              <span class="mode-desc">단어와 발음을 보고 맞는 뜻을 고릅니다.</span>
             </span>
           </label>
           <label class="mode">
             <input type="radio" name="mode" value="v" />
             <span class="mode-body">
-              <span class="mode-emoji" aria-hidden="true">🔗</span>
+              <svg class="ic mode-ic" aria-hidden="true"><use href="#i-branch"/></svg>
               <strong>유의어·파생어 맞히기</strong>
-              <span class="mode-desc">보기마다 단어가 하나씩! 유의어·파생어인 것 또는 아닌 것을 골라요.</span>
+              <span class="mode-desc">보기마다 단어 하나. 이 단어와 관련 있는 것, 또는 관련 없는 것을 고릅니다.</span>
             </span>
           </label>
         </div>
@@ -65,32 +96,35 @@
 
       <div class="start-bar">
         <p id="selection-summary" aria-live="polite">Day를 하나 이상 선택하세요.</p>
-        <button type="button" id="btn-start" class="btn primary" disabled>학습 시작</button>
+        <button type="button" id="btn-start" class="btn primary" disabled>
+          <svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>학습 시작
+        </button>
       </div>
     </section>
 
     <!-- ========== 2. 게임 화면 ========== -->
     <section id="screen-game" class="screen" aria-label="플래시카드 학습">
       <div class="hud">
-        <button type="button" id="btn-pause" class="btn soft small" aria-label="일시정지">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
-          <span>멈춤</span>
+        <button type="button" id="btn-pause" class="btn ghost small" aria-label="일시정지">
+          <svg class="ic" aria-hidden="true"><use href="#i-pause"/></svg><span>멈춤</span>
         </button>
         <div id="lives" class="lives" aria-label="남은 목숨"></div>
         <div class="hud-right">
-          <span class="progress-pill"><b id="hud-progress">0</b> 남음</span>
-          <button type="button" class="theme-btn small" data-theme-toggle aria-label="테마 바꾸기"></button>
+          <span class="progress-pill"><b id="hud-progress" class="num">0</b> 남음</span>
+          <button type="button" class="icon-btn" data-theme-toggle aria-label="테마 바꾸기">
+            <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+            <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+          </button>
         </div>
       </div>
 
       <div class="card-wrap">
         <div id="card" class="card">
-          <!-- 앞면 -->
           <div class="face front">
             <div class="card-meta">
               <span id="card-day" class="chip"></span>
-              <span id="card-src" class="chip outline"></span>
-              <span id="timer-num" class="timer-num">60</span>
+              <span id="card-src" class="chip"></span>
+              <span class="timer-num"><svg class="ic" aria-hidden="true"><use href="#i-timer"/></svg><span id="timer-num" class="num">60</span></span>
             </div>
             <div class="timer" aria-hidden="true"><div id="timer-bar" class="timer-bar"></div></div>
             <div class="word-block">
@@ -98,14 +132,13 @@
               <p class="pron-line">
                 <span id="card-pron" class="pron"></span>
                 <button type="button" id="btn-speak" class="icon-btn" aria-label="발음 듣기">
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  <svg class="ic" aria-hidden="true"><use href="#i-volume"/></svg>
                 </button>
               </p>
             </div>
             <div id="hint-box" class="hint-box" hidden></div>
             <p id="card-question" class="question"></p>
           </div>
-          <!-- 뒷면 -->
           <div class="face back" aria-live="polite">
             <div class="back-head">
               <span id="back-verdict" class="verdict"></span>
@@ -115,7 +148,7 @@
             <p id="back-pron" class="pron"></p>
             <dl class="back-list">
               <div><dt>뜻</dt><dd id="back-meaning"></dd></div>
-              <div id="back-deriv-row"><dt>유의어·파생어</dt><dd id="back-deriv"></dd></div>
+              <div id="back-deriv-row"><dt>유의어·파생어</dt><dd id="back-deriv" class="mono-text"></dd></div>
               <div id="back-ex-row"><dt>예문</dt><dd id="back-ex" class="example"></dd></div>
             </dl>
           </div>
@@ -125,31 +158,35 @@
       <div id="choices" class="choices" role="group" aria-label="보기"></div>
 
       <div class="action-bar">
-        <button type="button" id="btn-hint" class="btn soft">💡 힌트 보기 <kbd>H</kbd></button>
-        <button type="button" id="btn-next" class="btn primary" hidden><span class="label">다음 단어</span> <kbd>Enter</kbd></button>
+        <button type="button" id="btn-hint" class="btn ghost">
+          <svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg>힌트 <kbd>H</kbd>
+        </button>
+        <button type="button" id="btn-next" class="btn primary" hidden>
+          <span class="label">다음 단어</span><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </button>
       </div>
     </section>
 
     <!-- ========== 3. 결과 화면 ========== -->
     <section id="screen-result" class="screen" aria-labelledby="result-title">
       <div class="result-card">
-        <div id="result-emoji" class="result-emoji" aria-hidden="true"></div>
+        <svg id="result-icon" class="ic result-ic" aria-hidden="true"><use href="#i-trophy"/></svg>
         <h1 id="result-title"></h1>
         <p id="result-sub" class="lede"></p>
         <div class="stats">
-          <div class="stat ok"><span id="st-correct" class="stat-num">0</span><span class="stat-label">맞힘</span></div>
-          <div class="stat bad"><span id="st-wrong" class="stat-num">0</span><span class="stat-label">틀림</span></div>
-          <div class="stat hint"><span id="st-hint" class="stat-num">0</span><span class="stat-label">힌트 사용</span></div>
-          <div class="stat"><span id="st-left" class="stat-num">0</span><span class="stat-label">남은 단어</span></div>
+          <div class="stat main"><span id="st-correct" class="stat-num num">0</span><span class="stat-label">맞힘</span></div>
+          <div class="stat"><span id="st-wrong" class="stat-num num">0</span><span class="stat-label">틀림</span></div>
+          <div class="stat"><span id="st-hint" class="stat-num num">0</span><span class="stat-label">힌트 사용</span></div>
+          <div class="stat"><span id="st-left" class="stat-num num">0</span><span class="stat-label">남은 단어</span></div>
         </div>
         <div id="wrong-wrap" hidden>
-          <h2>틀린 단어</h2>
+          <h2>다시 볼 단어</h2>
           <ul id="wrong-list" class="wrong-list"></ul>
         </div>
         <div class="result-actions">
-          <button type="button" id="btn-retry-wrong" class="btn soft">틀린 단어만 다시</button>
-          <button type="button" id="btn-retry" class="btn soft">같은 설정으로 다시</button>
-          <button type="button" id="btn-home" class="btn primary">Day 다시 고르기</button>
+          <button type="button" id="btn-retry-wrong" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg>틀린 단어만 복습</button>
+          <button type="button" id="btn-retry" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>같은 설정으로 다시</button>
+          <button type="button" id="btn-home" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>Day 다시 고르기</button>
         </div>
       </div>
     </section>
@@ -157,12 +194,12 @@
     <!-- ========== 일시정지 ========== -->
     <div id="pause-overlay" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title">
       <div class="overlay-box">
-        <div class="result-emoji" aria-hidden="true">☕</div>
-        <h2 id="pause-title">잠깐 쉬어가요</h2>
-        <p>타이머가 멈췄어요. 카드는 다시 시작할 때까지 가려져요.</p>
+        <svg class="ic result-ic" aria-hidden="true"><use href="#i-pause-circle"/></svg>
+        <h2 id="pause-title">잠시 멈춤</h2>
+        <p>타이머가 멈췄어요. 숨 고르고, 준비되면 이어서 가요.</p>
         <div class="overlay-actions">
-          <button type="button" id="btn-quit" class="btn soft">학습 종료</button>
-          <button type="button" id="btn-resume" class="btn primary">계속하기</button>
+          <button type="button" id="btn-quit" class="btn ghost">오늘은 여기까지</button>
+          <button type="button" id="btn-resume" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>계속하기</button>
         </div>
       </div>
     </div>

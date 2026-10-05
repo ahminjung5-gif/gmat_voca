@@ -126,11 +126,11 @@
     if (settings.days.size === 0) {
       el.summary.textContent = "Day를 하나 이상 선택하세요.";
     } else if (n === 0) {
-      el.summary.textContent = "선택한 Day에 이 방법으로 풀 수 있는 단어가 없습니다. 다른 Day를 추가해 보세요.";
+      el.summary.textContent = "이 방법으로 풀 수 있는 단어가 없어요. Day를 더 추가해 보세요.";
     } else {
       const sorted = [...settings.days].sort((a, b) => a - b);
       const label = sorted.length <= 4 ? sorted.map((d) => `Day ${d}`).join(", ") : `Day ${sorted.length}개`;
-      el.summary.textContent = `${label}, ${n}단어 출제`;
+      el.summary.textContent = `${label} 선택, 오늘의 단어 ${n}개`;
     }
     el.start.disabled = n === 0;
     saveSettings();
@@ -183,7 +183,7 @@
   }
 
   function renderLives(popIndex = -1) {
-    const heart = '<svg viewBox="0 0 24 24" class="life{c}" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.3C1.1 8.3 3.3 4.5 7 4.5c2.1 0 3.6 1.1 5 2.9 1.4-1.8 2.9-2.9 5-2.9 3.7 0 5.9 3.8 4.5 7.2C19.5 16.4 12 21 12 21z"/></svg>';
+    const heart = '<svg class="life{c}" aria-hidden="true"><use href="#i-heart"/></svg>';
     el.lives.innerHTML = Array.from({ length: MAX_LIVES }, (_, i) => heart.replace("{c}", (i < game.lives ? "" : " lost") + (i === popIndex ? " pop" : ""))).join("");
     el.lives.setAttribute("aria-label", `남은 목숨 ${game.lives}개`);
   }
@@ -320,7 +320,7 @@
     el.timerNum.textContent = secs;
     const warn = secs <= 10;
     el.timerBar.classList.toggle("warn", warn);
-    el.timerNum.classList.toggle("warn", warn);
+    el.timerNum.parentElement.classList.toggle("warn", warn);
   }
 
   /* ---------- 정답 처리 ---------- */
@@ -357,9 +357,12 @@
     }
 
     // 카드 뒷면: 정답 바로 보여주기
-    el.backVerdict.textContent = isOk
-      ? ["정답! 🎉", "맞았어요! ✨", "완벽해요! 💯", "좋아요! 👏"][Math.floor(Math.random() * 4)]
-      : btn ? "아쉬워요 😢 정답을 확인해요" : "시간 초과 ⏰ 정답을 확인해요";
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const verdictText = isOk
+      ? pick(["정답", "정확해요", "좋아요, 이 감각 그대로", "확실히 알고 있네요"])
+      : btn ? pick(["괜찮아요, 지금 익히면 됩니다", "여기서 한 번 더 새겨두세요", "틀린 만큼 기억에 남아요"])
+            : "시간 초과, 천천히 한 번 더 보세요";
+    el.backVerdict.innerHTML = `<svg class="ic" aria-hidden="true"><use href="#i-${isOk ? "check" : "x"}"/></svg>${esc(verdictText)}`;
     el.backVerdict.className = "verdict " + (isOk ? "ok" : "bad");
     el.backQuestion.innerHTML = el.question.innerHTML;
     el.backWord.textContent = item.w;
@@ -446,11 +449,11 @@
 
     const left = game.queue.length + (game.answered ? 0 : 1);
     const titles = {
-      clear: ["라운드 완료!", "선택한 단어를 모두 맞혔어요. 대단해요!", "🏆"],
-      over: ["Game over", "목숨 3개를 모두 썼어요. 틀린 단어부터 다시 봐요.", "💔"],
-      quit: ["학습 종료", "멈춘 지점까지의 결과예요.", "📒"],
+      clear: ["라운드 완료", "고른 단어를 전부 맞혔어요. 오늘 몫은 충분히 해냈습니다.", "trophy"],
+      over: ["Game over", "여기서 틀린 단어가 오늘 가장 값진 단어예요. 그것만 다시 보고 가요.", "target"],
+      quit: ["오늘은 여기까지", "멈춘 곳까지 기록했어요. 다음에 이어서 하면 됩니다.", "flag"],
     };
-    $("result-emoji").textContent = titles[reason][2];
+    $("result-icon").innerHTML = `<use href="#i-${titles[reason][2]}"/>`;
     $("result-title").textContent = titles[reason][0];
     $("result-sub").textContent = titles[reason][1];
     $("st-correct").textContent = game.correct;
@@ -503,7 +506,6 @@
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
     document.querySelectorAll("[data-theme-toggle]").forEach((b) => {
-      b.textContent = t === "dark" ? "🌙" : "☀️";
       b.setAttribute("aria-label", t === "dark" ? "낮 모드로 바꾸기" : "밤 모드로 바꾸기");
     });
   }

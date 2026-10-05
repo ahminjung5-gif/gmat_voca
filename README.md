@@ -57,4 +57,4 @@ DERIVATIVE 열에서 두 단어가 붙어 있는 경우(예: `suspiciousskeptici
 | Esc / P | 멈춤 / 계속 |
 
 오른쪽 위 ☀️/🌙 버튼으로 낮·밤 모드를 바꿀 수 있고, 선택은 저장됩니다.
-폰트는 Pretendard(jsDelivr CDN)를 사용합니다.
+한글은 Pretendard, 영어 단어와 숫자는 JetBrains Mono(Google Fonts)를 사용합니다.
