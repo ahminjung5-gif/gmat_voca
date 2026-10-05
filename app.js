@@ -7,11 +7,32 @@
   const TIME_LIMIT = 60;          // 단어당 제한 시간(초)
   const MAX_LIVES = 3;            // 목숨
   const CHOICE_COUNT = 4;         // 보기 개수
-  const AUTO_NEXT_MS = 1400;      // 정답일 때 자동으로 넘어가는 시간
   const STORAGE_KEY = "gmat-voca-settings";
+  const THEME_KEY = "gmat-voca-theme";
 
   const WORDS = Array.isArray(window.WORDS) ? window.WORDS : [];
-  const FIELD_LABEL = { m: "meaning", v: "derivative" };
+
+  // DERIVATIVE 문자열을 단어 하나하나로 쪼갬
+  // "(1) conjecture, guess (2) theorize" -> ["conjecture", "guess", "theorize"]
+  function toTerms(v, headword) {
+    if (!v) return [];
+    const head = headword.toLowerCase();
+    const seen = new Set();
+    return v
+      .replace(/\*?\([^)]*\)/g, ",")       // (1), (명사형) 등 괄호 제거
+      .replace(/[*\[\]]/g, " ")
+      .split(/[,;\/\n]/)
+      .map((t) => t.replace(/\s+/g, " ").trim())
+      .filter((t) => {
+        const k = t.toLowerCase();
+        if (!t || t.length > 28 || t.split(" ").length > 4) return false;
+        if (!/^[a-z][a-z' \-.]*$/i.test(t)) return false;   // 영어 단어(구)만
+        if (k === head || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+  }
+  WORDS.forEach((w) => { w.t = toTerms(w.v, w.w); });
 
   /* =========================================================
      DOM
@@ -24,7 +45,7 @@
     card: $("card"), cardDay: $("card-day"), cardSrc: $("card-src"),
     word: $("card-word"), pron: $("card-pron"), question: $("card-question"),
     hintBox: $("hint-box"), timerBar: $("timer-bar"), timerNum: $("timer-num"),
-    backVerdict: $("back-verdict"), backWord: $("back-word"), backPron: $("back-pron"),
+    backVerdict: $("back-verdict"), backQuestion: $("back-question"), backWord: $("back-word"), backPron: $("back-pron"),
     backMeaning: $("back-meaning"), backDeriv: $("back-deriv"), backDerivRow: $("back-deriv-row"),
     backEx: $("back-ex"), backExRow: $("back-ex-row"),
     choices: $("choices"), hint: $("btn-hint"), next: $("btn-next"),
@@ -95,7 +116,7 @@
   }
 
   function playablePool(days = settings.days, mode = settings.mode) {
-    return WORDS.filter((w) => days.has(w.d) && w.w && w[mode]);
+    return WORDS.filter((w) => days.has(w.d) && w.w && (mode === "v" ? w.t.length > 0 : w.m));
   }
 
   function updateSummary() {
@@ -154,34 +175,32 @@
       remaining: TIME_LIMIT * 1000,
       deadline: 0,
       tick: null,
-      autoNext: null,
       ended: false,
-      lastOk: false,
     };
     renderLives();
     showScreen("game");
     nextWord();
   }
 
-  function renderLives() {
+  function renderLives(popIndex = -1) {
     const heart = '<svg viewBox="0 0 24 24" class="life{c}" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.3C1.1 8.3 3.3 4.5 7 4.5c2.1 0 3.6 1.1 5 2.9 1.4-1.8 2.9-2.9 5-2.9 3.7 0 5.9 3.8 4.5 7.2C19.5 16.4 12 21 12 21z"/></svg>';
-    el.lives.innerHTML = Array.from({ length: MAX_LIVES }, (_, i) => heart.replace("{c}", i < game.lives ? "" : " lost")).join("");
+    el.lives.innerHTML = Array.from({ length: MAX_LIVES }, (_, i) => heart.replace("{c}", (i < game.lives ? "" : " lost") + (i === popIndex ? " pop" : ""))).join("");
     el.lives.setAttribute("aria-label", `남은 목숨 ${game.lives}개`);
   }
 
-  function buildChoices(item) {
-    const f = game.mode;
-    const answer = item[f];
+  // 뜻 모드: 보기 = 뜻 4개 중 정답 1개
+  function buildMeaningChoices(item) {
+    const answer = item.m;
     const seen = new Set([norm(answer)]);
     const picks = [];
     const tryFrom = (list) => {
       for (const w of shuffle(list)) {
         if (picks.length >= CHOICE_COUNT - 1) break;
-        if (w === item || !w[f]) continue;
-        const k = norm(w[f]);
+        if (w === item || !w.m) continue;
+        const k = norm(w.m);
         if (seen.has(k)) continue;
         seen.add(k);
-        picks.push(w[f]);
+        picks.push(w.m);
       }
     };
     tryFrom(game.pool);                                   // 선택한 Day에서 먼저
@@ -189,8 +208,45 @@
     return shuffle([{ text: answer, ok: true }, ...picks.map((t) => ({ text: t, ok: false }))]);
   }
 
+  // 다른 단어의 유의어·파생어에서 '이 단어와 관계없는' 단어를 n개 뽑음
+  function outsiderTerms(item, n) {
+    const own = new Set(item.t.map((t) => t.toLowerCase()));
+    const stem = item.w.toLowerCase().slice(0, 5);
+    const picked = new Set();
+    const out = [];
+    const tryFrom = (list) => {
+      for (const w of shuffle(list)) {
+        if (out.length >= n) break;
+        if (w === item || !w.t.length) continue;
+        const t = w.t[Math.floor(Math.random() * w.t.length)];
+        const k = t.toLowerCase();
+        if (own.has(k) || picked.has(k) || k === item.w.toLowerCase() || k.startsWith(stem)) continue;
+        picked.add(k);
+        out.push(t);
+      }
+    };
+    tryFrom(game.pool);
+    if (out.length < n) tryFrom(WORDS);
+    return out;
+  }
+
+  // 유의어·파생어 모드: 보기마다 단어 하나
+  //  yes = "유의어·파생어인 것은?"  -> 이 단어의 것 1개 + 관계없는 것 3개
+  //  no  = "유의어·파생어가 아닌 것은?" -> 이 단어의 것 3개 + 관계없는 것 1개
+  function buildTermChoices(item) {
+    const canAskNo = item.t.length >= CHOICE_COUNT - 1;
+    const type = canAskNo && Math.random() < 0.5 ? "no" : "yes";
+    const own = shuffle(item.t);
+    let choices;
+    if (type === "yes") {
+      choices = [{ text: own[0], ok: true }, ...outsiderTerms(item, CHOICE_COUNT - 1).map((t) => ({ text: t, ok: false }))];
+    } else {
+      choices = [...own.slice(0, CHOICE_COUNT - 1).map((t) => ({ text: t, ok: false })), ...outsiderTerms(item, 1).map((t) => ({ text: t, ok: true }))];
+    }
+    return { type, choices: shuffle(choices) };
+  }
+
   function nextWord() {
-    clearTimeout(game.autoNext);
     if (game.queue.length === 0) return endGame("clear");
 
     const item = game.queue.shift();
@@ -198,13 +254,13 @@
     game.answered = false;
 
     // 카드 앞면
+    const wasFlipped = el.card.classList.contains("flipped");
     el.card.classList.remove("flipped");
     el.cardDay.textContent = `Day ${item.d}`;
     el.cardSrc.textContent = item.s || "";
     el.cardSrc.hidden = !item.s;
     el.word.textContent = item.w;
     el.pron.textContent = item.p || "발음 정보 없음";
-    el.question.textContent = game.mode === "m" ? "이 단어의 뜻은?" : "이 단어의 파생어·유의어는?";
     el.hintBox.hidden = true;
     el.hintBox.innerHTML = "";
     el.hint.disabled = !item.e;
@@ -213,12 +269,24 @@
     el.progress.textContent = game.queue.length + 1;
 
     // 이전 단어의 뒷면 내용 비우기 (카드 높이가 이전 단어 기준으로 남지 않도록)
-    setTimeout(() => {
-      if (game && !game.answered) [el.backVerdict, el.backWord, el.backPron, el.backMeaning, el.backDeriv, el.backEx].forEach((n) => { n.textContent = ""; });
-    }, 600);
+    const clearBack = () => {
+      if (game && !game.answered) [el.backVerdict, el.backQuestion, el.backWord, el.backPron, el.backMeaning, el.backDeriv, el.backEx].forEach((n) => { n.textContent = ""; });
+    };
+    wasFlipped ? setTimeout(clearBack, 600) : clearBack();
 
-    // 보기
-    const choices = buildChoices(item);
+    // 보기 + 질문
+    let choices;
+    if (game.mode === "m") {
+      choices = buildMeaningChoices(item);
+      el.question.innerHTML = '<span class="q-pill">이 단어의 뜻은?</span>';
+    } else {
+      const r = buildTermChoices(item);
+      choices = r.choices;
+      el.question.innerHTML = r.type === "yes"
+        ? '<span class="q-pill yes">유의어·파생어<u>인</u> 것은?</span>'
+        : '<span class="q-pill no">유의어·파생어가 <u>아닌</u> 것은?</span>';
+    }
+    el.choices.classList.toggle("terms", game.mode === "v");
     el.choices.innerHTML = choices.map((c, i) =>
       `<button type="button" class="choice" data-ok="${c.ok}"><span class="key">${i + 1}</span><span>${esc(c.text)}</span></button>`).join("");
 
@@ -272,14 +340,13 @@
       else b.classList.add("dim");
     });
 
-    game.lastOk = isOk;
     if (isOk) {
       game.correct++;
     } else {
       game.wrong++;
       game.lives--;
       game.wrongWords.set(item.w, item);
-      renderLives();
+      renderLives(game.lives);
       // 틀린 단어는 같은 라운드에서 다시 나오도록 뒤쪽 임의 위치에 다시 넣음
       const minGap = Math.min(3, game.queue.length);
       const pos = minGap + Math.floor(Math.random() * (game.queue.length - minGap + 1));
@@ -290,8 +357,11 @@
     }
 
     // 카드 뒷면: 정답 바로 보여주기
-    el.backVerdict.textContent = isOk ? "정답입니다" : btn ? "오답입니다. 정답을 확인하세요" : "시간 초과. 정답을 확인하세요";
+    el.backVerdict.textContent = isOk
+      ? ["정답! 🎉", "맞았어요! ✨", "완벽해요! 💯", "좋아요! 👏"][Math.floor(Math.random() * 4)]
+      : btn ? "아쉬워요 😢 정답을 확인해요" : "시간 초과 ⏰ 정답을 확인해요";
     el.backVerdict.className = "verdict " + (isOk ? "ok" : "bad");
+    el.backQuestion.innerHTML = el.question.innerHTML;
     el.backWord.textContent = item.w;
     el.backPron.textContent = item.p || "";
     el.backMeaning.textContent = item.m || "정보 없음";
@@ -303,21 +373,14 @@
 
     el.hint.hidden = true;
 
-    if (game.lives <= 0) {
-      el.next.hidden = false;
-      el.next.firstChild.textContent = "결과 보기 ";
-      el.next.focus({ preventScroll: true });
-      return;
-    }
-    el.next.firstChild.textContent = "다음 단어 ";
+    // 정답이든 오답이든 '다음' 버튼을 눌러야 넘어감
+    el.next.querySelector(".label").textContent = game.lives <= 0 ? "결과 보기" : "다음 단어";
     el.next.hidden = false;
     el.next.focus({ preventScroll: true });
-    if (isOk) game.autoNext = setTimeout(goNext, AUTO_NEXT_MS);
   }
 
   function goNext() {
     if (!game || !game.answered || game.paused) return;
-    clearTimeout(game.autoNext);
     if (game.lives <= 0) return endGame("over");
     nextWord();
   }
@@ -356,7 +419,6 @@
     if (!game || game.paused || game.ended) return;
     game.paused = true;
     stopTimer();
-    clearTimeout(game.autoNext);
     el.overlay.hidden = false;
     el.resume.focus();
   }
@@ -365,7 +427,6 @@
     game.paused = false;
     el.overlay.hidden = true;
     if (!game.answered) resumeTimer();
-    else if (game.lastOk) game.autoNext = setTimeout(goNext, 600); // 정답 직후 멈췄다면 자동 진행을 이어감
   }
   el.pause.addEventListener("click", pauseGame);
   el.resume.addEventListener("click", resumeGame);
@@ -380,16 +441,16 @@
   function endGame(reason) {
     if (!game) return;
     stopTimer();
-    clearTimeout(game.autoNext);
     game.ended = true;
     game.paused = false;
 
     const left = game.queue.length + (game.answered ? 0 : 1);
     const titles = {
-      clear: ["라운드 완료", "선택한 단어를 모두 맞혔습니다."],
-      over: ["Game over", "목숨 3개를 모두 잃었습니다. 틀린 단어부터 다시 보세요."],
-      quit: ["학습 종료", "중간에 멈춘 지점까지의 결과입니다."],
+      clear: ["라운드 완료!", "선택한 단어를 모두 맞혔어요. 대단해요!", "🏆"],
+      over: ["Game over", "목숨 3개를 모두 썼어요. 틀린 단어부터 다시 봐요.", "💔"],
+      quit: ["학습 종료", "멈춘 지점까지의 결과예요.", "📒"],
     };
+    $("result-emoji").textContent = titles[reason][2];
     $("result-title").textContent = titles[reason][0];
     $("result-sub").textContent = titles[reason][1];
     $("st-correct").textContent = game.correct;
@@ -400,7 +461,7 @@
     const wrongs = [...game.wrongWords.values()];
     $("wrong-wrap").hidden = wrongs.length === 0;
     $("wrong-list").innerHTML = wrongs.map((w) =>
-      `<li><span class="w">${esc(w.w)}</span><span class="m">${esc(w[game.mode] || w.m)}</span></li>`).join("");
+      `<li><span class="w">${esc(w.w)}</span><span class="m">${esc(w.m)}</span>${game.mode === "v" ? `<span class="m">${esc(w.t.join(", "))}</span>` : ""}</li>`).join("");
     $("btn-retry-wrong").hidden = wrongs.length === 0;
 
     showScreen("result");
@@ -435,6 +496,24 @@
     if (k === "h" || k === "H") { e.preventDefault(); showHint(); return; }
     if (k === "Enter" && game.answered) { e.preventDefault(); goNext(); }
   });
+
+  /* =========================================================
+     테마 (낮 / 밤)
+     ========================================================= */
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    document.querySelectorAll("[data-theme-toggle]").forEach((b) => {
+      b.textContent = t === "dark" ? "🌙" : "☀️";
+      b.setAttribute("aria-label", t === "dark" ? "낮 모드로 바꾸기" : "밤 모드로 바꾸기");
+    });
+  }
+  document.querySelectorAll("[data-theme-toggle]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      applyTheme(next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+    }));
+  applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
 
   /* =========================================================
      시작
