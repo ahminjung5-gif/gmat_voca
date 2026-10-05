@@ -664,3 +664,12 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .mascot-stage.pop svg, .mascot-stage.pop .mascot-flash { animation: none; }
 }
+
+/* iOS 사파리: 카드 안에 따로 띄운 요소(표시 태그, 스크롤 영역)가 뒤집힌 면에서 비쳐 보이는 문제 방지 */
+.face.front { transform: rotateY(0deg); }
+.face > *, .face-body > * { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.card.flipped .face.front .mark-tag,
+.card:not(.flipped) .face.back .mark-tag { visibility: hidden; }
+.card.flipped .face.front .face-body,
+.card:not(.flipped) .face.back .face-body { visibility: hidden; transition: visibility 0s linear .25s; }
+.card .face-body { transition: visibility 0s linear 0s; }
