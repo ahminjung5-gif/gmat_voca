@@ -43,6 +43,13 @@
       <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></symbol>
       <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></symbol>
       <symbol id="i-pause-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+      <symbol id="i-login" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+      <symbol id="i-notebook" viewBox="0 0 24 24"><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M16 2v20"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
     </defs>
   </svg>
 
@@ -55,11 +62,36 @@
           <h1 id="setup-title"><svg class="ic logo" aria-hidden="true"><use href="#i-terminal"/></svg>GMAT VOCA<span class="cursor" aria-hidden="true"></span></h1>
           <p class="lede">오늘 볼 Day를 고르세요. 하루 한 묶음씩 쌓으면, 그게 점수가 됩니다.</p>
         </div>
-        <button type="button" class="icon-btn lg" data-theme-toggle aria-label="테마 바꾸기">
-          <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
-          <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
-        </button>
+        <div class="head-actions">
+          <div id="user-box" class="user-box"></div>
+          <button type="button" class="icon-btn lg" data-theme-toggle aria-label="테마 바꾸기">
+            <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+            <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+          </button>
+        </div>
       </header>
+
+      <div class="panel records">
+        <div class="panel-row">
+          <h2 id="records-title">내 기록</h2>
+          <span id="sync-status" class="sync"></span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-flame"/></svg><span><b id="k-streak" class="num">0</b>일</span><small>연속 학습</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 단어</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span><b id="k-master" class="num">0</b><span class="muted num" id="k-master-total"></span></span><small id="k-master-label">익힌 단어</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg><span><b id="k-note" class="num">0</b>개</span><small>오답 노트</small></div>
+        </div>
+        <div class="activity" id="activity" aria-label="최근 14일 학습량"></div>
+        <div class="records-foot">
+          <details class="recent">
+            <summary>최근 학습 <span id="recent-count" class="muted"></span></summary>
+            <ul id="recent-list" class="recent-list"></ul>
+          </details>
+          <button type="button" id="btn-note" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg>오답 노트 학습</button>
+        </div>
+        <p id="login-nudge" class="nudge" hidden></p>
+      </div>
 
       <div class="panel">
         <div class="panel-row">
@@ -92,6 +124,12 @@
             </span>
           </label>
         </div>
+        <label class="toggle">
+          <input type="checkbox" id="opt-skip" />
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span>익힌 단어 건너뛰기 <small class="muted">(3번 연속 맞힌 단어)</small></span>
+        </label>
+        <p class="hint-line">자주 틀린 단어와 처음 보는 단어가 먼저 나와요.</p>
       </div>
 
       <div class="start-bar">
@@ -179,6 +217,7 @@
           <div class="stat"><span id="st-hint" class="stat-num num">0</span><span class="stat-label">힌트 사용</span></div>
           <div class="stat"><span id="st-left" class="stat-num num">0</span><span class="stat-label">남은 단어</span></div>
         </div>
+        <p id="result-streak" class="result-streak"></p>
         <div id="wrong-wrap" hidden>
           <h2>다시 볼 단어</h2>
           <ul id="wrong-list" class="wrong-list"></ul>
@@ -203,9 +242,52 @@
         </div>
       </div>
     </div>
+    <!-- ========== 로그인 ========== -->
+    <div id="login-modal" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <div class="overlay-box left">
+        <div class="modal-head">
+          <h2 id="login-title">로그인</h2>
+          <button type="button" class="icon-btn" data-close aria-label="닫기"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+        <p>로그인하면 폰에서 한 공부가 PC에서도 그대로 이어져요.</p>
+        <button type="button" id="btn-google" class="btn ghost wide">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.5 12.3c0-.8-.1-1.5-.2-2.2H12v4.2h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-8z"/><path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.3 1.1-3.8 1.1-2.9 0-5.4-2-6.3-4.6H2.1v2.8A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.7 14.1a6.6 6.6 0 0 1 0-4.2V7.1H2.1a11 11 0 0 0 0 9.8z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.2-3.2A11 11 0 0 0 2.1 7.1l3.6 2.8C6.6 7.3 9.1 5.4 12 5.4z"/></svg>
+          Google로 계속하기
+        </button>
+        <div class="or"><span>또는 이메일로</span></div>
+        <div class="field-row">
+          <input type="email" id="login-email" class="field" placeholder="you@example.com" autocomplete="email" />
+          <button type="button" id="btn-email" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>링크 받기</button>
+        </div>
+        <p id="login-msg" class="form-msg" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <!-- ========== 계정 / 닉네임 ========== -->
+    <div id="account-modal" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="account-title">
+      <div class="overlay-box left">
+        <div class="modal-head">
+          <h2 id="account-title">닉네임</h2>
+          <button type="button" class="icon-btn" data-close id="account-close" aria-label="닫기"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+        <p id="account-desc">학습 화면에서 부를 이름이에요. 언제든 바꿀 수 있어요.</p>
+        <div class="field-row">
+          <input type="text" id="nick-input" class="field" maxlength="16" placeholder="닉네임 (16자 이내)" autocomplete="nickname" />
+          <button type="button" id="btn-nick-save" class="btn primary">저장</button>
+        </div>
+        <p id="nick-msg" class="form-msg" aria-live="polite"></p>
+        <div id="account-extra" class="account-extra">
+          <span id="account-email" class="muted"></span>
+          <button type="button" id="btn-logout" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-logout"/></svg>로그아웃</button>
+        </div>
+      </div>
+    </div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
   <script src="data/words.js"></script>
+  <script src="store.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

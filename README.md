@@ -6,10 +6,13 @@
 ## 파일 구성
 
 ```
-index.html            화면 구조
-style.css             디자인
-app.js                게임 로직
-data/words.js         단어 데이터 (엑셀에서 변환)
+index.html               화면 구조
+style.css                디자인
+app.js                   게임 로직, 기록 화면
+store.js                 기록 저장 (이 기기 + Supabase 동기화)
+config.js                Supabase 연결 정보 (직접 채워 넣기)
+supabase/schema.sql      Supabase에 만들 테이블
+data/words.js            단어 데이터 (엑셀에서 변환)
 scripts/convert_xlsx.py  엑셀 → data/words.js 변환 스크립트
 ```
 
@@ -58,3 +61,46 @@ DERIVATIVE 열에서 두 단어가 붙어 있는 경우(예: `suspiciousskeptici
 
 오른쪽 위 ☀️/🌙 버튼으로 낮·밤 모드를 바꿀 수 있고, 선택은 저장됩니다.
 한글은 Pretendard, 영어 단어와 숫자는 JetBrains Mono(Google Fonts)를 사용합니다.
+
+## 로그인 · 기록 저장 (Supabase)
+
+config.js가 비어 있으면 로그인 없이 이 기기에만 기록이 저장됩니다.
+아래를 한 번 해두면 구글/이메일로 로그인하고 폰·PC 사이에 기록이 이어집니다.
+
+### 1. 프로젝트 만들기
+1. supabase.com 가입 → **New project** (Region은 Northeast Asia (Seoul) 추천, DB 비밀번호는 아무거나 저장해 두기)
+2. 만들어지면 왼쪽 메뉴 **SQL Editor** → `supabase/schema.sql` 내용을 전부 붙여넣고 **Run**
+
+### 2. config.js 채우기
+1. 상단 **Connect** 버튼(또는 Project Settings → API Keys)에서
+   - Project URL (`https://xxxx.supabase.co`)
+   - Publishable key (`sb_publishable_...`) 또는 anon public key
+2. `config.js`의 `SUPABASE_URL`, `SUPABASE_KEY`에 붙여넣고 GitHub에 올리기
+   (이 두 값은 공개돼도 괜찮습니다. 기록은 RLS로 본인만 읽고 쓸 수 있어요. **service_role / secret key는 절대 넣지 마세요.**)
+
+### 3. 로그인 후 돌아올 주소 등록
+Authentication → **URL Configuration**
+- Site URL: `https://내프로젝트.vercel.app`
+- Redirect URLs: `https://내프로젝트.vercel.app/**` 추가
+
+여기까지 하면 **이메일 로그인**(메일로 받은 링크 클릭)은 바로 됩니다.
+
+### 4. Google 로그인 켜기 (선택)
+1. console.cloud.google.com → 프로젝트 만들기 → **APIs & Services → OAuth consent screen** 설정 (External, 앱 이름·이메일만 입력)
+2. **Credentials → Create credentials → OAuth client ID** → Web application
+   - Authorized JavaScript origins: `https://내프로젝트.vercel.app`
+   - Authorized redirect URIs: Supabase의 Authentication → Sign In / Providers → Google 화면에 나오는 Callback URL (`https://xxxx.supabase.co/auth/v1/callback`)
+3. 발급된 Client ID / Client Secret을 Supabase의 Google provider에 붙여넣고 Enable → Save
+
+### 저장되는 기록
+- 단어별: 맞힌 횟수, 틀린 횟수, 연속 정답, 마지막으로 본 시간, 오답 노트 여부 (뜻 / 유의어 모드 따로)
+- 날짜별: 푼 단어 수, 정답 수, 학습 시간 → 연속 학습일, 최근 14일 그래프
+- 학습 한 판마다: 모드, Day, 맞힘/틀림/힌트, 결과
+- 닉네임
+
+### 규칙
+- 3번 연속 맞힌 단어 = 익힌 단어 (Day 칸 아래 막대가 진도)
+- 틀린 단어는 오답 노트에 들어가고, 이후 2번 연속 맞히면 빠짐
+- 출제 순서: 자주 틀린 단어, 오답 노트 단어, 처음 보는 단어가 먼저
+- 로그인 전에 공부한 기록은 첫 로그인 때 계정으로 옮겨짐
+- 인터넷이 끊겨도 기기에 먼저 저장하고, 연결되면 다시 올림

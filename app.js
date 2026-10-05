@@ -95,38 +95,64 @@
   WORDS.forEach((w) => { dayCounts[w.d] = (dayCounts[w.d] || 0) + 1; });
   const allDays = Object.keys(dayCounts).map(Number).sort((a, b) => a - b);
 
-  const settings = { days: new Set(), mode: "m" };
+  const settings = { days: new Set(), mode: "m", skip: false };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (saved) {
       (saved.days || []).forEach((d) => dayCounts[d] && settings.days.add(d));
       if (saved.mode === "m" || saved.mode === "v") settings.mode = saved.mode;
+      settings.skip = !!saved.skip;
     }
   } catch (_) { /* 저장소 사용 불가 시 무시 */ }
 
   function saveSettings() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ days: [...settings.days], mode: settings.mode })); } catch (_) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ days: [...settings.days], mode: settings.mode, skip: settings.skip })); } catch (_) {}
   }
 
   function buildDayGrid() {
     el.dayGrid.innerHTML = allDays.map((d) =>
       `<button type="button" class="day-chip" data-day="${d}" aria-pressed="${settings.days.has(d)}">
          <span class="d">Day ${d}</span><span class="n">${dayCounts[d]}단어</span>
+         <span class="prog" aria-hidden="true"><i></i></span>
        </button>`).join("");
   }
 
-  function playablePool(days = settings.days, mode = settings.mode) {
-    return WORDS.filter((w) => days.has(w.d) && w.w && (mode === "v" ? w.t.length > 0 : w.m));
+  // Day별 진도: 이 모드에서 익힌 단어 비율
+  function renderDayProgress() {
+    const mode = settings.mode;
+    const by = {};
+    WORDS.forEach((w) => {
+      if (mode === "v" && !w.t.length) return;
+      const o = by[w.d] || (by[w.d] = { t: 0, m: 0, seen: 0 });
+      o.t++;
+      if (Store.isMastered(mode, w.w)) o.m++;
+      if (Store.wordStat(mode, w.w)) o.seen++;
+    });
+    document.querySelectorAll(".day-chip").forEach((b) => {
+      const o = by[b.dataset.day] || { t: 0, m: 0, seen: 0 };
+      const pct = o.t ? Math.round((o.m / o.t) * 100) : 0;
+      b.querySelector(".prog i").style.width = pct + "%";
+      b.classList.toggle("done", o.t > 0 && o.m === o.t);
+      b.title = `익힌 단어 ${o.m}/${o.t}, 본 단어 ${o.seen}`;
+    });
   }
+
+  function playablePool(days = settings.days, mode = settings.mode, skipMastered = false) {
+    return WORDS.filter((w) => days.has(w.d) && w.w && (mode === "v" ? w.t.length > 0 : w.m)
+      && !(skipMastered && Store.isMastered(mode, w.w)));
+  }
+  const studyPool = () => playablePool(settings.days, settings.mode, settings.skip);
 
   function updateSummary() {
     document.querySelectorAll(".day-chip").forEach((b) =>
       b.setAttribute("aria-pressed", String(settings.days.has(Number(b.dataset.day)))));
-    const n = playablePool().length;
+    const n = studyPool().length;
     if (settings.days.size === 0) {
       el.summary.textContent = "Day를 하나 이상 선택하세요.";
     } else if (n === 0) {
-      el.summary.textContent = "이 방법으로 풀 수 있는 단어가 없어요. Day를 더 추가해 보세요.";
+      el.summary.textContent = settings.skip && playablePool().length
+        ? "고른 Day의 단어를 전부 익혔어요. 다른 Day로 넘어가 볼까요?"
+        : "이 방법으로 풀 수 있는 단어가 없어요. Day를 더 추가해 보세요.";
     } else {
       const sorted = [...settings.days].sort((a, b) => a - b);
       const label = sorted.length <= 4 ? sorted.map((d) => `Day ${d}`).join(", ") : `Day ${sorted.length}개`;
@@ -147,9 +173,12 @@
   $("btn-none").addEventListener("click", () => { settings.days.clear(); updateSummary(); });
   document.querySelectorAll('input[name="mode"]').forEach((r) => {
     r.checked = r.value === settings.mode;
-    r.addEventListener("change", () => { settings.mode = r.value; updateSummary(); });
+    r.addEventListener("change", () => { settings.mode = r.value; updateSummary(); renderRecords(); renderDayProgress(); });
   });
-  el.start.addEventListener("click", () => startGame(playablePool()));
+  const optSkip = $("opt-skip");
+  optSkip.checked = settings.skip;
+  optSkip.addEventListener("change", () => { settings.skip = optSkip.checked; updateSummary(); });
+  el.start.addEventListener("click", () => startGame(studyPool()));
 
   /* =========================================================
      게임 상태
@@ -163,7 +192,12 @@
       mode,
       source: pool,               // 다시 하기용 원본
       pool: choicePool,           // 보기 생성용
-      queue: shuffle(pool),       // 앞으로 나올 단어 (중복 없음, 틀린 단어만 다시 끼워 넣음)
+      // 앞으로 나올 단어 (중복 없음, 틀린 단어만 다시 끼워 넣음)
+      // 자주 틀린 단어, 처음 보는 단어가 먼저 나오도록 약한 순서로 정렬 (약간의 무작위 포함)
+      queue: pool.map((w) => ({ w, k: Store.weakness(mode, w.w) + Math.random() * 2 }))
+                 .sort((a, b) => b.k - a.k).map((o) => o.w),
+      startedAt: Date.now(),
+      isNote: false,
       current: null,
       lives: MAX_LIVES,
       correct: 0,
@@ -329,6 +363,7 @@
     if (!game || game.answered || game.paused) return;
     game.answered = true;
     stopTimer();
+    const spent = TIME_LIMIT - game.remaining / 1000;
 
     const item = game.current;
     const isOk = !!btn && btn.dataset.ok === "true";
@@ -340,6 +375,7 @@
       else b.classList.add("dim");
     });
 
+    Store.recordAnswer(item.w, game.mode, isOk, spent);
     if (isOk) {
       game.correct++;
     } else {
@@ -467,6 +503,22 @@
       `<li><span class="w">${esc(w.w)}</span><span class="m">${esc(w.m)}</span>${game.mode === "v" ? `<span class="m">${esc(w.t.join(", "))}</span>` : ""}</li>`).join("");
     $("btn-retry-wrong").hidden = wrongs.length === 0;
 
+    const answeredCount = game.correct + game.wrong;
+    if (answeredCount > 0) {
+      Store.recordSession({
+        mode: game.mode,
+        days: [...new Set(game.source.map((w) => w.d))].sort((a, b) => a - b),
+        total: game.source.length, correct: game.correct, wrong: game.wrong, hints: game.hints,
+        result: game.isNote ? `note-${reason}` : reason,
+        dur: Math.round((Date.now() - game.startedAt) / 1000),
+      });
+    }
+    const streak = Store.streakDays();
+    const nick = Store.state.profile && Store.state.profile.nickname;
+    $("result-streak").textContent = answeredCount === 0 ? "" :
+      streak >= 2 ? `${nick ? nick + "님, " : ""}${streak}일째 이어가는 중이에요. 내일도 이 자리에서 만나요.`
+                  : `${nick ? nick + "님, " : ""}오늘 기록이 저장됐어요. 내일 한 번 더 오면 연속 학습이 시작돼요.`;
+
     showScreen("result");
   }
 
@@ -476,7 +528,7 @@
     startGame(wrongs, game.mode, game.pool); // 보기는 원래 Day 범위에서
   });
   $("btn-retry").addEventListener("click", () => startGame(game.source, game.mode, game.pool));
-  $("btn-home").addEventListener("click", () => { game = null; showScreen("setup"); });
+  $("btn-home").addEventListener("click", () => { game = null; showScreen("setup"); refreshSetup(); });
 
   /* =========================================================
      키보드 단축키
@@ -498,6 +550,165 @@
     }
     if (k === "h" || k === "H") { e.preventDefault(); showHint(); return; }
     if (k === "Enter" && game.answered) { e.preventDefault(); goNext(); }
+  });
+
+  /* =========================================================
+     계정 · 기록
+     ========================================================= */
+  const MODE_LABEL = { m: "뜻", v: "유의어·파생어" };
+  const RESULT_LABEL = { clear: "완료", over: "Game over", quit: "중단" };
+
+  function openModal(node) { node.hidden = false; const f = node.querySelector("input, button:not([data-close])"); if (f) f.focus(); }
+  function closeModal(node) { node.hidden = true; }
+  document.querySelectorAll("[data-close]").forEach((b) =>
+    b.addEventListener("click", () => closeModal(b.closest(".overlay"))));
+
+  function renderUser() {
+    const st = Store.state;
+    const box = $("user-box");
+    const nudge = $("login-nudge");
+    if (!Store.hasCloud) {
+      box.innerHTML = "";
+      nudge.hidden = false;
+      nudge.textContent = "지금은 이 기기에만 기록이 저장돼요. config.js에 Supabase 정보를 넣으면 로그인이 켜집니다.";
+      return;
+    }
+    if (st.user) {
+      const name = (st.profile && st.profile.nickname) || "닉네임 설정";
+      box.innerHTML = `<button type="button" class="user-chip" id="btn-account"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span>${esc(name)}</span></button>`;
+      $("btn-account").addEventListener("click", () => openAccount(false));
+      nudge.hidden = true;
+    } else {
+      box.innerHTML = `<button type="button" class="btn ghost small" id="btn-login"><svg class="ic" aria-hidden="true"><use href="#i-login"/></svg>로그인</button>`;
+      $("btn-login").addEventListener("click", () => { $("login-msg").textContent = ""; openModal($("login-modal")); });
+      nudge.hidden = false;
+      nudge.textContent = "로그인하면 폰과 PC 어디서든 기록이 이어져요. 지금까지의 기록도 계정으로 옮겨집니다.";
+    }
+  }
+
+  function renderSync() {
+    const map = { local: "이 기기에 저장", idle: Store.state.user ? "동기화됨" : "", saving: "저장 중…", error: "동기화 실패, 다시 시도하는 중" };
+    const node = $("sync-status");
+    node.textContent = map[Store.state.sync] || "";
+    node.dataset.state = Store.state.sync;
+  }
+
+  function renderRecords() {
+    const st = Store.state;
+    const mode = settings.mode;
+    const nick = st.profile && st.profile.nickname;
+    $("records-title").textContent = nick ? `${nick}님의 기록` : "내 기록";
+
+    $("k-streak").textContent = Store.streakDays();
+    const today = st.daily[Store.dayKey()];
+    $("k-today").textContent = today ? today.n : 0;
+
+    const pool = WORDS.filter((w) => mode === "m" ? w.m : w.t.length);
+    const mastered = pool.filter((w) => Store.isMastered(mode, w.w)).length;
+    $("k-master").textContent = mastered;
+    $("k-master-total").textContent = ` / ${pool.length}`;
+    $("k-master-label").textContent = `익힌 단어 (${MODE_LABEL[mode]})`;
+    const noteCount = pool.filter((w) => Store.inNote(mode, w.w)).length;
+    $("k-note").textContent = noteCount;
+    const noteBtn = $("btn-note");
+    noteBtn.disabled = noteCount === 0;
+    noteBtn.title = noteCount ? `${MODE_LABEL[mode]} 모드 오답 노트 ${noteCount}개` : "아직 오답 노트가 비어 있어요";
+
+    // 최근 14일 학습량
+    const days = Store.lastDays(14);
+    const max = Math.max(10, ...days.map((d) => d.n));
+    $("activity").innerHTML = days.map((d, i) => {
+      const h = d.n ? Math.max(8, Math.round((d.n / max) * 100)) : 0;
+      const label = `${d.date.getMonth() + 1}/${d.date.getDate()}`;
+      return `<div class="bar-col${i === days.length - 1 ? " today" : ""}" title="${label}: ${d.n}개 (정답 ${d.c})">
+        <div class="bar"><i style="height:${h}%"></i></div><span>${i === days.length - 1 ? "오늘" : d.date.getDate()}</span></div>`;
+    }).join("");
+
+    // 최근 학습 목록
+    const list = st.sessions.slice(0, 8);
+    $("recent-count").textContent = st.sessions.length ? `${st.sessions.length}회` : "";
+    $("recent-list").innerHTML = list.length ? list.map((x) => {
+      const d = new Date(x.at);
+      const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const isNote = String(x.result).startsWith("note-");
+      const res = String(x.result).replace("note-", "");
+      const dayLabel = isNote ? "오답 노트" : x.days.length > 3 ? `Day ${x.days.length}개` : x.days.map((n) => `Day ${n}`).join(", ");
+      return `<li><span class="num muted">${when}</span><span>${esc(dayLabel)} <small class="muted">${MODE_LABEL[x.mode] || ""}</small></span>
+        <span class="num">${x.correct}/${x.correct + x.wrong}</span><span class="tag ${res}">${RESULT_LABEL[res] || res}</span></li>`;
+    }).join("") : `<li class="empty">첫 학습을 시작하면 여기에 쌓여요.</li>`;
+  }
+
+  function refreshSetup() {
+    renderUser(); renderSync(); renderRecords(); renderDayProgress(); updateSummary();
+  }
+
+  // 오답 노트 학습
+  $("btn-note").addEventListener("click", () => {
+    const mode = settings.mode;
+    const words = WORDS.filter((w) => (mode === "m" ? w.m : w.t.length) && Store.inNote(mode, w.w));
+    if (!words.length) return;
+    const choicePool = playablePool(new Set(words.map((w) => w.d)), mode);
+    startGame(words, mode, choicePool);
+    game.isNote = true;
+  });
+
+  // 로그인
+  $("btn-google").addEventListener("click", async () => {
+    $("login-msg").textContent = "Google로 이동하는 중…";
+    const { error } = await Store.signInGoogle();
+    if (error) $("login-msg").textContent = "Google 로그인을 시작하지 못했어요. Supabase에서 Google 로그인이 켜져 있는지 확인하세요.";
+  });
+  async function sendEmailLink() {
+    const email = $("login-email").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { $("login-msg").textContent = "이메일 주소를 확인해 주세요."; return; }
+    $("btn-email").disabled = true;
+    $("login-msg").textContent = "보내는 중…";
+    const { error } = await Store.signInEmail(email);
+    $("btn-email").disabled = false;
+    $("login-msg").textContent = error
+      ? "메일을 보내지 못했어요. 잠시 후 다시 시도하세요."
+      : `${email}로 로그인 링크를 보냈어요. 메일의 링크를 누르면 바로 들어와집니다.`;
+  }
+  $("btn-email").addEventListener("click", sendEmailLink);
+  $("login-email").addEventListener("keydown", (e) => { if (e.key === "Enter") sendEmailLink(); });
+
+  // 닉네임 / 계정
+  function openAccount(required) {
+    const st = Store.state;
+    $("nick-input").value = (st.profile && st.profile.nickname) || "";
+    $("nick-msg").textContent = "";
+    $("account-title").textContent = required ? "반가워요" : "계정";
+    $("account-desc").textContent = required
+      ? "뭐라고 불러드릴까요? 닉네임은 나중에 바꿀 수 있어요."
+      : "닉네임은 언제든 바꿀 수 있어요.";
+    $("account-close").hidden = required;
+    $("account-extra").hidden = required;
+    $("account-email").textContent = st.user ? st.user.email || "" : "";
+    openModal($("account-modal"));
+  }
+  async function saveNick() {
+    const v = $("nick-input").value.trim();
+    if (!v) { $("nick-msg").textContent = "닉네임을 입력해 주세요."; return; }
+    $("btn-nick-save").disabled = true;
+    const { error } = await Store.setNickname(v);
+    $("btn-nick-save").disabled = false;
+    if (error) { $("nick-msg").textContent = "저장하지 못했어요. 잠시 후 다시 시도하세요."; return; }
+    closeModal($("account-modal"));
+  }
+  $("btn-nick-save").addEventListener("click", saveNick);
+  $("nick-input").addEventListener("keydown", (e) => { if (e.key === "Enter") saveNick(); });
+  $("btn-logout").addEventListener("click", async () => { closeModal($("account-modal")); await Store.signOut(); });
+
+  let lastUserId = null;
+  Store.onChange(() => {
+    const st = Store.state;
+    if (screens.setup.classList.contains("active")) refreshSetup();
+    else renderSync();
+    // 로그인 직후: 로그인 창 닫고, 닉네임이 없으면 설정 창 띄우기
+    const uid = st.user ? st.user.id : null;
+    if (uid && uid !== lastUserId) closeModal($("login-modal"));
+    lastUserId = uid;
+    if (uid && st.sync === "idle" && !(st.profile && st.profile.nickname) && $("account-modal").hidden) openAccount(true);
   });
 
   /* =========================================================
@@ -525,4 +736,5 @@
   }
   buildDayGrid();
   updateSummary();
+  Store.init();
 })();
