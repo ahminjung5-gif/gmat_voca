@@ -297,6 +297,7 @@
     el.pron.textContent = item.p || "발음 정보 없음";
     el.hintBox.hidden = true;
     el.hintBox.innerHTML = "";
+    $("front-body").scrollTop = 0;
     el.hint.disabled = !item.e;
     el.hint.hidden = false;
     el.next.hidden = true;
@@ -408,6 +409,7 @@
     el.backDerivRow.hidden = !item.v;
     el.backEx.innerHTML = renderExample(item.e, item.w);
     el.backExRow.hidden = !item.e;
+    $("back-body").scrollTop = 0;
     setTimeout(() => el.card.classList.add("flipped"), isOk ? 150 : 420);
 
     el.hint.hidden = true;
