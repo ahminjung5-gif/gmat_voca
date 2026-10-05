@@ -359,14 +359,11 @@
 
   /* ---------- 계산된 값 ---------- */
   function wordStat(mode, word) { return state.stats[`${mode}:${word}`] || null; }
-  function isMastered(mode, word) { const s = wordStat(mode, word); return !!s && s.s >= MASTER_STREAK; }
-  function inNote(mode, word) { const s = wordStat(mode, word); return !!s && s.note; }
 
-  // 약한 단어일수록 큰 값 (먼저 출제)
-  function weakness(mode, word) {
+  // 먼저 출제할 단어일수록 큰 값: 헷갈리는 단어 > 자주 틀린 단어 > 나머지(무작위)
+  function priority(mode, word) {
     const s = wordStat(mode, word);
-    if (!s) return 1;                       // 처음 보는 단어
-    return 1 + s.w * 1.5 - s.s * 1.2 + (s.note ? 2 : 0);
+    return (state.flags[word] ? 4 : 0) + (s ? Math.min(s.w, 4) * 0.8 : 0);
   }
 
   function streakDays() {
@@ -406,11 +403,11 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
 
   window.Store = {
-    state, hasCloud, MASTER_STREAK,
+    state, hasCloud,
     init, onChange: (fn) => listeners.add(fn),
     recordAnswer, recordSession, recordView, flush,
     isFlagged, toggleFlag, flaggedWords, getStudyPos, setStudyPos,
     signInGoogle, signInEmail, signOut, setNickname,
-    wordStat, isMastered, inNote, weakness, streakDays, lastDays, dayKey,
+    wordStat, priority, streakDays, lastDays, dayKey,
   };
 })();

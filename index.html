@@ -91,8 +91,8 @@
         <div class="kpis">
           <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-flame"/></svg><span><b id="k-streak" class="num">0</b>일</span><small>연속 학습</small></div>
           <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 단어</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span><b id="k-master" class="num">0</b><span class="muted num" id="k-master-total"></span></span><small id="k-master-label">익힌 단어</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg><span><b id="k-note" class="num">0</b>개</span><small>오답 노트</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span><b id="k-viewed" class="num">0</b>장</span><small>오늘 본 카드</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><span><b id="k-flag" class="num">0</b>개</span><small>헷갈리는 단어</small></div>
         </div>
         <div class="activity" id="activity" aria-label="최근 14일 학습량"></div>
         <div class="records-foot">
@@ -102,7 +102,6 @@
           </details>
           <div class="records-btns">
             <button type="button" id="btn-wordbook" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg>헷갈리는 단어장 <b id="wb-count" class="num">0</b></button>
-            <button type="button" id="btn-note" class="btn ghost small only-game"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg>오답 노트 학습</button>
           </div>
         </div>
         <p id="login-nudge" class="nudge" hidden></p>
@@ -139,12 +138,7 @@
             </span>
           </label>
         </div>
-        <label class="toggle">
-          <input type="checkbox" id="opt-skip" />
-          <span class="toggle-ui" aria-hidden="true"></span>
-          <span>익힌 단어 건너뛰기 <small class="muted">(3번 연속 맞힌 단어)</small></span>
-        </label>
-        <p class="hint-line">자주 틀린 단어와 처음 보는 단어가 먼저 나와요.</p>
+        <p class="hint-line flush">헷갈리는 단어와 자주 틀린 단어가 먼저 나오고, 나머지는 무작위로 섞여요.</p>
       </div>
 
       <div class="panel only-study">
@@ -154,8 +148,6 @@
           <div class="pills" id="st-filter" role="radiogroup" aria-label="볼 단어">
             <button type="button" data-v="all" role="radio">전체</button>
             <button type="button" data-v="flag" role="radio">헷갈리는 단어 <span class="num"></span></button>
-            <button type="button" data-v="new" role="radio">아직 못 익힌 단어 <span class="num"></span></button>
-            <button type="button" data-v="note" role="radio">오답 노트 <span class="num"></span></button>
           </div>
         </div>
         <div class="opt-group">
@@ -172,7 +164,6 @@
             <button type="button" data-v="mean" role="radio">뜻 먼저</button>
           </div>
         </div>
-        <p class="hint-line flush">"아직 못 익힌 단어"는 게임 뜻 맞히기에서 3번 연속 맞히지 못한 단어예요.</p>
       </div>
 
       <div class="start-bar">

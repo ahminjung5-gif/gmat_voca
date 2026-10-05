@@ -98,15 +98,14 @@
   WORDS.forEach((w) => { dayCounts[w.d] = (dayCounts[w.d] || 0) + 1; });
   const allDays = Object.keys(dayCounts).map(Number).sort((a, b) => a - b);
 
-  const settings = { days: new Set(), mode: "m", skip: false, view: "game", stFilter: "all", stOrder: "seq", stFront: "word", wbSort: "recent" };
+  const settings = { days: new Set(), mode: "m", view: "game", stFilter: "all", stOrder: "seq", stFront: "word", wbSort: "recent" };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (saved) {
       (saved.days || []).forEach((d) => dayCounts[d] && settings.days.add(d));
       if (saved.mode === "m" || saved.mode === "v") settings.mode = saved.mode;
-      settings.skip = !!saved.skip;
       if (saved.view === "study") settings.view = "study";
-      if (["all", "flag", "new", "note"].includes(saved.stFilter)) settings.stFilter = saved.stFilter;
+      if (saved.stFilter === "flag") settings.stFilter = "flag";
       if (saved.stOrder === "shuf") settings.stOrder = "shuf";
       if (saved.stFront === "mean") settings.stFront = "mean";
       if (["recent", "day", "abc"].includes(saved.wbSort)) settings.wbSort = saved.wbSort;
@@ -115,7 +114,7 @@
 
   function saveSettings() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      days: [...settings.days], mode: settings.mode, skip: settings.skip, view: settings.view,
+      days: [...settings.days], mode: settings.mode, view: settings.view,
       stFilter: settings.stFilter, stOrder: settings.stOrder, stFront: settings.stFront, wbSort: settings.wbSort,
     })); } catch (_) {}
   }
@@ -124,35 +123,27 @@
     el.dayGrid.innerHTML = allDays.map((d) =>
       `<button type="button" class="day-chip" data-day="${d}" aria-pressed="${settings.days.has(d)}">
          <span class="d">Day ${d}</span><span class="n">${dayCounts[d]}단어</span>
-         <span class="prog" aria-hidden="true"><i></i></span>
+         <span class="fl" hidden><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><b class="num"></b></span>
        </button>`).join("");
   }
 
-  // Day별 진도: 이 모드에서 익힌 단어 비율
+  // Day 칸: 그 Day에서 체크한 헷갈리는 단어 수
   function renderDayProgress() {
-    const mode = settings.mode;
     const by = {};
-    WORDS.forEach((w) => {
-      if (mode === "v" && !w.t.length) return;
-      const o = by[w.d] || (by[w.d] = { t: 0, m: 0, seen: 0 });
-      o.t++;
-      if (Store.isMastered(mode, w.w)) o.m++;
-      if (Store.wordStat(mode, w.w)) o.seen++;
-    });
+    WORDS.forEach((w) => { if (Store.isFlagged(w.w)) by[w.d] = (by[w.d] || 0) + 1; });
     document.querySelectorAll(".day-chip").forEach((b) => {
-      const o = by[b.dataset.day] || { t: 0, m: 0, seen: 0 };
-      const pct = o.t ? Math.round((o.m / o.t) * 100) : 0;
-      b.querySelector(".prog i").style.width = pct + "%";
-      b.classList.toggle("done", o.t > 0 && o.m === o.t);
-      b.title = `익힌 단어 ${o.m}/${o.t}, 본 단어 ${o.seen}`;
+      const n = by[b.dataset.day] || 0;
+      const fl = b.querySelector(".fl");
+      fl.hidden = n === 0;
+      fl.querySelector("b").textContent = n;
+      b.title = n ? `헷갈리는 단어 ${n}개` : "";
     });
   }
 
-  function playablePool(days = settings.days, mode = settings.mode, skipMastered = false) {
-    return WORDS.filter((w) => days.has(w.d) && w.w && (mode === "v" ? w.t.length > 0 : w.m)
-      && !(skipMastered && Store.isMastered(mode, w.w)));
+  function playablePool(days = settings.days, mode = settings.mode) {
+    return WORDS.filter((w) => days.has(w.d) && w.w && (mode === "v" ? w.t.length > 0 : w.m));
   }
-  const studyPool = () => playablePool(settings.days, settings.mode, settings.skip);
+  const studyPool = () => playablePool(settings.days, settings.mode);
 
   function updateSummary() {
     document.querySelectorAll(".day-chip").forEach((b) =>
@@ -163,9 +154,7 @@
     if (settings.days.size === 0) {
       el.summary.textContent = "Day를 하나 이상 선택하세요.";
     } else if (n === 0) {
-      el.summary.textContent = settings.skip && playablePool().length
-        ? "고른 Day의 단어를 전부 익혔어요. 다른 Day로 넘어가 볼까요?"
-        : "이 방법으로 풀 수 있는 단어가 없어요. Day를 더 추가해 보세요.";
+      el.summary.textContent = "이 방법으로 풀 수 있는 단어가 없어요. Day를 더 추가해 보세요.";
     } else {
       const sorted = [...settings.days].sort((a, b) => a - b);
       const label = sorted.length <= 4 ? sorted.map((d) => `Day ${d}`).join(", ") : `Day ${sorted.length}개`;
@@ -186,11 +175,8 @@
   $("btn-none").addEventListener("click", () => { settings.days.clear(); updateSummary(); });
   document.querySelectorAll('input[name="mode"]').forEach((r) => {
     r.checked = r.value === settings.mode;
-    r.addEventListener("change", () => { settings.mode = r.value; updateSummary(); renderRecords(); renderDayProgress(); });
+    r.addEventListener("change", () => { settings.mode = r.value; updateSummary(); });
   });
-  const optSkip = $("opt-skip");
-  optSkip.checked = settings.skip;
-  optSkip.addEventListener("change", () => { settings.skip = optSkip.checked; updateSummary(); });
   el.start.addEventListener("click", () => {
     if (settings.view === "study") startStudyFromSetup();
     else startGame(studyPool());
@@ -210,7 +196,7 @@
       pool: choicePool,           // 보기 생성용
       // 앞으로 나올 단어 (중복 없음, 틀린 단어만 다시 끼워 넣음)
       // 자주 틀린 단어, 처음 보는 단어가 먼저 나오도록 약한 순서로 정렬 (약간의 무작위 포함)
-      queue: pool.map((w) => ({ w, k: Store.weakness(mode, w.w) + Math.random() * 2 }))
+      queue: pool.map((w) => ({ w, k: Store.priority(mode, w.w) + Math.random() * 2 }))
                  .sort((a, b) => b.k - a.k).map((o) => o.w),
       startedAt: Date.now(),
       tag: null,                  // "note" = 오답 노트, "flag" = 헷갈리는 단어장
@@ -623,25 +609,21 @@
     const today = st.daily[Store.dayKey()];
     $("k-today").textContent = today ? today.n : 0;
 
-    const pool = WORDS.filter((w) => mode === "m" ? w.m : w.t.length);
-    const mastered = pool.filter((w) => Store.isMastered(mode, w.w)).length;
-    $("k-master").textContent = mastered;
-    $("k-master-total").textContent = ` / ${pool.length}`;
-    $("k-master-label").textContent = `익힌 단어 (${MODE_LABEL[mode]})`;
-    const noteCount = pool.filter((w) => Store.inNote(mode, w.w)).length;
-    $("k-note").textContent = noteCount;
-    $("wb-count").textContent = Object.keys(st.flags).length;
-    const noteBtn = $("btn-note");
-    noteBtn.disabled = noteCount === 0;
-    noteBtn.title = noteCount ? `${MODE_LABEL[mode]} 모드 오답 노트 ${noteCount}개` : "아직 오답 노트가 비어 있어요";
+    $("k-viewed").textContent = today ? today.v || 0 : 0;
+    const flagCount = Object.keys(st.flags).length;
+    $("k-flag").textContent = flagCount;
+    $("wb-count").textContent = flagCount;
 
     // 최근 14일 학습량
     const days = Store.lastDays(14);
-    const max = Math.max(10, ...days.map((d) => d.n));
+    // 게임에서 푼 단어 + 공부 모드에서 본 카드
+    const amount = (d) => d.n + (d.v || 0);
+    const max = Math.max(10, ...days.map(amount));
     $("activity").innerHTML = days.map((d, i) => {
-      const h = d.n ? Math.max(8, Math.round((d.n / max) * 100)) : 0;
+      const t = amount(d);
+      const h = t ? Math.max(8, Math.round((t / max) * 100)) : 0;
       const label = `${d.date.getMonth() + 1}/${d.date.getDate()}`;
-      return `<div class="bar-col${i === days.length - 1 ? " today" : ""}" title="${label}: ${d.n}개 (정답 ${d.c})">
+      return `<div class="bar-col${i === days.length - 1 ? " today" : ""}" title="${label}: 게임 ${d.n}개, 카드 ${d.v || 0}장">
         <div class="bar"><i style="height:${h}%"></i></div><span>${i === days.length - 1 ? "오늘" : d.date.getDate()}</span></div>`;
     }).join("");
 
@@ -664,15 +646,6 @@
     renderUser(); renderSync(); renderRecords(); renderDayProgress(); renderStudyOptions(); updateSummary();
   }
 
-  // 오답 노트 학습
-  $("btn-note").addEventListener("click", () => {
-    const mode = settings.mode;
-    const words = WORDS.filter((w) => (mode === "m" ? w.m : w.t.length) && Store.inNote(mode, w.w));
-    if (!words.length) return;
-    const choicePool = playablePool(new Set(words.map((w) => w.d)), mode);
-    startGame(words, mode, choicePool);
-    game.tag = "note";
-  });
 
   // 로그인
   $("btn-google").addEventListener("click", async () => {
@@ -725,7 +698,7 @@
   Store.onChange(() => {
     const st = Store.state;
     if (screens.setup.classList.contains("active")) refreshSetup();
-    else renderSync();
+    else { renderSync(); renderDayProgress(); }
     if (screens.wordbook.classList.contains("active")) updateWordbookHead();
     if (screens.study.classList.contains("active")) renderStudyFlag();
     // 로그인 직후: 로그인 창 닫고, 닉네임이 없으면 설정 창 띄우기
@@ -765,12 +738,9 @@
   document.querySelectorAll(".view-seg [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 
   /* ---------- 공부 옵션 ---------- */
-  const isNoteAny = (w) => Store.inNote("m", w.w) || Store.inNote("v", w.w);
   const STUDY_FILTERS = {
     all: () => true,
     flag: (w) => Store.isFlagged(w.w),
-    new: (w) => !Store.isMastered("m", w.w),
-    note: isNoteAny,
   };
   function studyBase(days = settings.days) { return WORDS.filter((w) => days.has(w.d) && w.w); }
   function studyList() { return studyBase().filter(STUDY_FILTERS[settings.stFilter]); }
@@ -789,7 +759,7 @@
     setPills("st-order", settings.stOrder);
     setPills("st-front", settings.stFront);
     const base = studyBase();
-    ["flag", "new", "note"].forEach((k) => {
+    ["flag"].forEach((k) => {
       const span = document.querySelector(`#st-filter [data-v="${k}"] .num`);
       if (span) span.textContent = settings.days.size ? base.filter(STUDY_FILTERS[k]).length : "";
     });
@@ -811,11 +781,9 @@
     if (settings.days.size === 0) {
       el.summary.textContent = "Day를 하나 이상 선택하세요.";
     } else if (n === 0) {
-      el.summary.textContent = {
-        flag: "고른 Day에 체크한 단어가 없어요. 전체로 보면서 헷갈리는 걸 체크해 보세요.",
-        new: "고른 Day의 단어를 전부 익혔어요. 대단해요.",
-        note: "고른 Day에 오답 노트 단어가 없어요.",
-      }[settings.stFilter] || "볼 단어가 없어요.";
+      el.summary.textContent = settings.stFilter === "flag"
+        ? "고른 Day에 체크한 단어가 없어요. 전체로 보면서 헷갈리는 걸 체크해 보세요."
+        : "볼 단어가 없어요.";
     } else {
       const pos = canResume() ? Store.getStudyPos(posKey()) : 0;
       el.summary.textContent = pos > 0 && pos < n
@@ -847,7 +815,7 @@
   function startStudyFromSetup() {
     const list = studyList();
     const sorted = [...settings.days].sort((a, b) => a - b);
-    const filterLabel = { all: "", flag: " 헷갈리는 단어", new: " 못 익힌 단어", note: " 오답 노트" }[settings.stFilter];
+    const filterLabel = { all: "", flag: " 헷갈리는 단어" }[settings.stFilter];
     const dayLabel = sorted.length <= 3 ? sorted.map((d) => `Day ${d}`).join(", ") : `Day ${sorted.length}개`;
     startStudy(list, { resumeKey: canResume() ? posKey() : null, label: dayLabel + filterLabel });
   }
