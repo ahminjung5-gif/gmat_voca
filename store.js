@@ -23,6 +23,9 @@
     stats: {},          // "m:word" -> { c, w, s, last, note }
     daily: {},          // "2026-10-05" -> { n, c, sec }
     sessions: [],       // 최근 학습 기록 (최신순)
+    flags: {},          // 헷갈리는 단어장: word -> 체크한 시각
+    studyPos: {},       // 공부 모드 이어보기: key -> 위치
+    needsMigration: false, // Supabase에 새 SQL(공부 모드용)이 아직 없으면 true
     sync: hasCloud ? "idle" : "local",   // local | idle | saving | error
     ready: false,
   };
@@ -43,6 +46,8 @@
     try {
       localStorage.setItem(lsKey(), JSON.stringify({
         profile: state.profile, stats: state.stats, daily: state.daily, sessions: state.sessions.slice(0, 60),
+        flags: state.flags, studyPos: state.studyPos,
+        pendingStudySync: !!(state.user && state.needsMigration) || undefined,
       }));
     } catch (_) {}
   }
@@ -57,6 +62,8 @@
     state.stats = (d && d.stats) || {};
     state.daily = (d && d.daily) || {};
     state.sessions = (d && d.sessions) || [];
+    state.flags = (d && d.flags) || {};
+    state.studyPos = (d && d.studyPos) || {};
   }
 
   /* ---------- 기록 남기기 ---------- */
@@ -74,12 +81,51 @@
     dirtyStats.add(k);
 
     const dk = dayKey();
-    const day = state.daily[dk] || { n: 0, c: 0, sec: 0 };
+    const day = state.daily[dk] || { n: 0, c: 0, sec: 0, v: 0 };
     day.n++; if (ok) day.c++;
     day.sec += Math.max(0, Math.round(seconds || 0));
     state.daily[dk] = day;
     dirtyDays.add(dk);
 
+    saveLocal();
+    scheduleFlush();
+  }
+
+  // 공부 모드에서 카드 한 장을 본 것 (연속 학습일에 포함)
+  function recordView() {
+    const dk = dayKey();
+    const day = state.daily[dk] || { n: 0, c: 0, sec: 0, v: 0 };
+    day.v = (day.v || 0) + 1;
+    state.daily[dk] = day;
+    dirtyDays.add(dk);
+    saveLocal();
+    scheduleFlush();
+  }
+
+  // 헷갈리는 단어 체크 / 해제
+  const dirtyFlags = new Map();   // word -> true(추가) / false(삭제)
+  function isFlagged(word) { return !!state.flags[word]; }
+  function toggleFlag(word, on) {
+    const next = on === undefined ? !state.flags[word] : !!on;
+    if (next) state.flags[word] = new Date().toISOString();
+    else delete state.flags[word];
+    dirtyFlags.set(word, next);
+    saveLocal();
+    scheduleFlush();
+    emit();
+    return next;
+  }
+  function flaggedWords() {
+    return Object.entries(state.flags).sort((a, b) => (a[1] < b[1] ? 1 : -1)).map(([w, at]) => ({ word: w, at }));
+  }
+
+  // 공부 모드 이어보기 위치
+  const dirtyPos = new Set();
+  function getStudyPos(key) { return state.studyPos[key] || 0; }
+  function setStudyPos(key, idx) {
+    if (state.studyPos[key] === idx) return;
+    state.studyPos[key] = idx;
+    dirtyPos.add(key);
     saveLocal();
     scheduleFlush();
   }
@@ -112,7 +158,7 @@
   async function flush() {
     clearTimeout(flushTimer);
     if (!state.user || !sb) return;
-    if (!dirtyStats.size && !dirtyDays.size) return;
+    if (!dirtyStats.size && !dirtyDays.size && !dirtyFlags.size && !dirtyPos.size) return;
     const uid = state.user.id;
     const statRows = [...dirtyStats].map((k) => {
       const i = k.indexOf(":");
@@ -121,9 +167,16 @@
     });
     const dayRows = [...dirtyDays].map((d) => {
       const v = state.daily[d];
-      return { user_id: uid, day: d, answered: v.n, correct: v.c, seconds: v.sec };
+      const row = { user_id: uid, day: d, answered: v.n, correct: v.c, seconds: v.sec };
+      if (!state.needsMigration) row.viewed = v.v || 0;
+      return row;
     });
+    const flagAdds = [], flagDels = [];
+    dirtyFlags.forEach((on, w) => (on ? flagAdds : flagDels).push(w));
+    const posRows = [...dirtyPos].map((k) => ({ user_id: uid, key: k, idx: state.studyPos[k] || 0, updated_at: new Date().toISOString() }));
+    const extraOk = !state.needsMigration;
     dirtyStats.clear(); dirtyDays.clear();
+    if (extraOk) { dirtyFlags.clear(); dirtyPos.clear(); }
     setSync("saving");
     try {
       for (let i = 0; i < statRows.length; i += 500) {
@@ -134,12 +187,30 @@
         const { error } = await sb.from("daily_activity").upsert(dayRows, { onConflict: "user_id,day" });
         if (error) throw error;
       }
+      if (extraOk && flagAdds.length) {
+        const rows = flagAdds.filter((w) => state.flags[w]).map((w) => ({ user_id: uid, word: w, created_at: state.flags[w] }));
+        if (rows.length) {
+          const { error } = await sb.from("bookmarks").upsert(rows, { onConflict: "user_id,word" });
+          if (error) throw error;
+        }
+      }
+      if (extraOk && flagDels.length) {
+        const { error } = await sb.from("bookmarks").delete().eq("user_id", uid).in("word", flagDels);
+        if (error) throw error;
+      }
+      if (extraOk && posRows.length) {
+        const { error } = await sb.from("study_progress").upsert(posRows, { onConflict: "user_id,key" });
+        if (error) throw error;
+      }
       setSync("idle");
     } catch (e) {
       console.error(e);
       // 실패한 건 다시 표시해 두고 나중에 재시도
       statRows.forEach((r) => dirtyStats.add(`${r.mode}:${r.word}`));
       dayRows.forEach((r) => dirtyDays.add(r.day));
+      flagAdds.forEach((w) => { if (!dirtyFlags.has(w)) dirtyFlags.set(w, true); });
+      flagDels.forEach((w) => { if (!dirtyFlags.has(w)) dirtyFlags.set(w, false); });
+      posRows.forEach((r) => dirtyPos.add(r.key));
       setSync("error");
       clearTimeout(flushTimer);
       flushTimer = setTimeout(flush, 15000);
@@ -168,6 +239,19 @@
       sb.from("sessions").select("played_at,mode,days,total,correct,wrong,hints,result,duration_sec").order("played_at", { ascending: false }).limit(60),
     ]);
 
+    // 공부 모드용 테이블 (아직 SQL을 안 돌렸으면 없어도 나머지는 동작)
+    let flagRows = [], posRows = [];
+    try {
+      flagRows = await fetchAll("bookmarks", "word,created_at");
+      const { data, error } = await sb.from("study_progress").select("key,idx");
+      if (error) throw error;
+      posRows = data || [];
+      state.needsMigration = false;
+    } catch (e) {
+      console.warn("공부 모드 테이블이 없어요. supabase/migration_study.sql 을 실행하세요.", e);
+      state.needsMigration = true;
+    }
+
     const cloudEmpty = statRows.length === 0 && dayRows.length === 0;
     const guest = loadLocal("gmat-voca-data:guest");
 
@@ -177,13 +261,36 @@
       state.stats[`${r.mode}:${r.word}`] = { c: r.correct, w: r.wrong, s: r.streak, last: r.last_seen, note: r.in_note };
     });
     state.daily = {};
-    dayRows.forEach((r) => { state.daily[r.day] = { n: r.answered, c: r.correct, sec: r.seconds }; });
+    dayRows.forEach((r) => { state.daily[r.day] = { n: r.answered, c: r.correct, sec: r.seconds, v: r.viewed || 0 }; });
+    if (!state.needsMigration) {
+      const cached = loadLocal();
+      state.flags = {};
+      flagRows.forEach((r) => { state.flags[r.word] = r.created_at; });
+      state.studyPos = {};
+      posRows.forEach((r) => { state.studyPos[r.key] = r.idx; });
+      // SQL을 실행하기 전에 이 기기에만 저장해 둔 단어장이 있으면 올림
+      if (cached && cached.pendingStudySync) {
+        Object.entries(cached.flags || {}).forEach(([w, at]) => { if (!state.flags[w]) { state.flags[w] = at; dirtyFlags.set(w, true); } });
+        Object.entries(cached.studyPos || {}).forEach(([k, i]) => { if (!(k in state.studyPos)) { state.studyPos[k] = i; dirtyPos.add(k); } });
+      }
+    } else {
+      const cached = loadLocal();
+      state.flags = (cached && cached.flags) || {};
+      state.studyPos = (cached && cached.studyPos) || {};
+    }
     state.sessions = (sessRows || []).map((r) => ({
       at: r.played_at, mode: r.mode, days: r.days, total: r.total, correct: r.correct,
       wrong: r.wrong, hints: r.hints, result: r.result, dur: r.duration_sec,
     }));
 
     // 처음 로그인했고 로그인 전에 공부한 기록이 있으면 계정으로 옮김
+    // 로그인 전에 체크한 단어장도 계정에 합치기
+    if (guest && guest.flags && Object.keys(guest.flags).length) {
+      Object.entries(guest.flags).forEach(([w, at]) => { if (!state.flags[w]) { state.flags[w] = at; dirtyFlags.set(w, true); } });
+      Object.entries(guest.studyPos || {}).forEach(([k, i]) => { if (!(k in state.studyPos)) { state.studyPos[k] = i; dirtyPos.add(k); } });
+      guest.flags = {}; guest.studyPos = {};
+      try { localStorage.setItem("gmat-voca-data:guest", JSON.stringify(guest)); } catch (_) {}
+    }
     if (cloudEmpty && guest && guest.stats && Object.keys(guest.stats).length) {
       state.stats = guest.stats;
       state.daily = guest.daily || {};
@@ -204,6 +311,7 @@
     }
     saveLocal();
     setSync("idle");
+    if (dirtyFlags.size || dirtyPos.size) flush();
   }
 
   async function onUser(user) {
@@ -265,7 +373,8 @@
     let n = 0;
     const d = new Date();
     if (!state.daily[dayKey(d)]) d.setDate(d.getDate() - 1);   // 오늘 아직 안 했으면 어제부터 셈
-    while (state.daily[dayKey(d)] && state.daily[dayKey(d)].n > 0) { n++; d.setDate(d.getDate() - 1); }
+    const active = (x) => x && (x.n > 0 || (x.v || 0) > 0);
+    while (active(state.daily[dayKey(d)])) { n++; d.setDate(d.getDate() - 1); }
     return n;
   }
 
@@ -275,7 +384,7 @@
     d.setDate(d.getDate() - (count - 1));
     for (let i = 0; i < count; i++) {
       const k = dayKey(d);
-      out.push({ key: k, date: new Date(d), ...(state.daily[k] || { n: 0, c: 0, sec: 0 }) });
+      out.push({ key: k, date: new Date(d), ...{ n: 0, c: 0, sec: 0, v: 0 }, ...(state.daily[k] || {}) });
       d.setDate(d.getDate() + 1);
     }
     return out;
@@ -299,7 +408,8 @@
   window.Store = {
     state, hasCloud, MASTER_STREAK,
     init, onChange: (fn) => listeners.add(fn),
-    recordAnswer, recordSession, flush,
+    recordAnswer, recordSession, recordView, flush,
+    isFlagged, toggleFlag, flaggedWords, getStudyPos, setStudyPos,
     signInGoogle, signInEmail, signOut, setNickname,
     wordStat, isMastered, inNote, weakness, streakDays, lastDays, dayKey,
   };

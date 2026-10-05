@@ -31,6 +31,7 @@ create table if not exists public.daily_activity (
   answered int not null default 0,
   correct int not null default 0,
   seconds int not null default 0,
+  viewed int not null default 0,          -- 공부 모드에서 본 카드 수
   primary key (user_id, day)
 );
 
@@ -71,3 +72,34 @@ create policy "own daily_activity" on public.daily_activity
 drop policy if exists "own sessions" on public.sessions;
 create policy "own sessions" on public.sessions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- 공부 모드 ----------
+-- 헷갈리는 단어장
+create table if not exists public.bookmarks (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  word text not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, word)
+);
+
+-- 공부 모드 이어보기 위치
+create table if not exists public.study_progress (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  key text not null,
+  idx int not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+
+alter table public.bookmarks      enable row level security;
+alter table public.study_progress enable row level security;
+
+drop policy if exists "own bookmarks" on public.bookmarks;
+create policy "own bookmarks" on public.bookmarks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "own study_progress" on public.study_progress;
+create policy "own study_progress" on public.study_progress
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.bookmarks, public.study_progress to authenticated;
