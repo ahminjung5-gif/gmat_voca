@@ -456,7 +456,10 @@ kbd {
 }
 .view-seg button[aria-selected="true"] { background: var(--tint); border-color: var(--primary); color: var(--primary); }
 #screen-setup[data-view="game"] .only-study,
-#screen-setup[data-view="study"] .only-game { display: none !important; }
+#screen-setup[data-view="study"] .only-game,
+#screen-setup[data-deck="rc"] .only-voca,
+#screen-setup:not([data-deck="voca"][data-view="game"]) .only-voca-game,
+#screen-setup:not([data-deck="rc"][data-view="game"]) .only-rc-game { display: none !important; }
 
 .opt-group { display: grid; gap: 8px; margin-top: 4px; }
 .opt-group + .opt-group { margin-top: 14px; }
@@ -673,3 +676,97 @@ kbd {
 .card.flipped .face.front .face-body,
 .card:not(.flipped) .face.back .face-body { visibility: hidden; transition: visibility 0s linear .25s; }
 .card .face-body { transition: visibility 0s linear 0s; }
+
+/* =========================================================
+   첫 화면: 오늘의 조건 + 덱 선택
+   ========================================================= */
+.setup-head h1 { font-size: clamp(1.7rem, 7vw, 2.6rem); }
+.today-cond { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
+.today-title { margin: 0; font-size: .8rem; color: var(--text-soft); }
+.cond { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+.cond .ck { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; color: transparent; }
+.cond .ck .ic { width: 12px; height: 12px; stroke-width: 3; }
+.cond.done .ck { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.cond-row { display: flex; justify-content: space-between; gap: 8px; font-size: .9rem; }
+.cond-row small { margin-left: 4px; font-family: var(--mono); }
+.cond-bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.cond-bar i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .3s ease; }
+.kpis.three { margin-top: 12px; }
+.kpi.vague .ic { color: var(--amber); }
+
+.section-title { font-size: 1rem; font-weight: 700; margin: 22px 0 10px; }
+.decks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.deck {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 14px 12px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.deck-head p { margin: 0; }
+.deck-title { font-family: var(--mono); font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
+.deck-sub { font-size: .78rem; color: var(--text-soft); margin-top: 2px !important; }
+.deck-status { font-size: .78rem; color: var(--primary); margin-top: 2px !important; }
+.deck-mode {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 10px;
+  padding: 12px 10px; font-weight: 700; font-size: .92rem; text-align: left;
+  transition: border-color .15s ease, background-color .15s ease, transform .08s ease;
+}
+.deck-mode .ic { color: var(--primary); }
+.deck-mode:hover { border-color: var(--primary); background: var(--tint); }
+.deck-mode:active { transform: scale(.98); }
+
+/* Day 선택 화면 제목 */
+.setup-title-row { margin: 4px 0 14px; }
+.setup-title-row h1 { font-family: var(--mono); font-weight: 800; font-size: clamp(1.4rem, 5vw, 1.8rem); letter-spacing: -0.02em; }
+.setup-title-row h1 .muted { font-weight: 500; }
+
+/* =========================================================
+   RC set 카드 (뒤집기 없음)
+   ========================================================= */
+.card.noflip { cursor: default; }
+.card.noflip .face.back { display: none; }
+.rc-head { display: flex; align-items: center; gap: 8px; padding-right: 110px; }
+.rc-head .word.small { margin-top: 0; }
+.rc-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.rc-badges .chip.lv-상 { border-color: var(--amber); color: var(--amber); }
+.rc-senses { display: grid; gap: 12px; margin-top: 10px; }
+.rc-sense { display: grid; gap: 6px; }
+.rc-mean { margin: 0; font-size: .92rem; line-height: 1.55; }
+.rc-mean b { color: var(--primary); }
+.rc-syns { display: flex; flex-wrap: wrap; gap: 5px; }
+.syn { font-family: var(--mono); font-size: .84rem; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); }
+.rc-memo { margin-top: 12px; font-size: .88rem; }
+.rc-memo summary { cursor: pointer; color: var(--text-soft); font-weight: 600; }
+.rc-memo .example { margin-top: 8px; }
+.hint-mean { margin: 0; }
+.hint-mean .src { display: inline-block; font-size: .68rem; font-weight: 800; color: var(--text-soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-right: 6px; }
+.wb-detail .rc-senses { margin-top: 0; }
+
+/* 리스트: 줄마다 오키/애매 바로 체크 */
+.sd-list li { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.sd-list li.cur { background: var(--tint); box-shadow: inset 3px 0 0 var(--primary); }
+.sd-list li.cur .sd-row { background: transparent; box-shadow: none; }
+.sd-row { grid-template-columns: 34px 1fr; min-width: 0; }
+.lm { display: flex; gap: 4px; padding-right: 10px; }
+
+/* 완료 알림 */
+.toast {
+  position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+  max-width: min(560px, calc(100% - 32px));
+  background: var(--surface); color: var(--primary); border: 1px solid var(--primary); border-radius: 12px;
+  padding: 10px 16px; font-size: .9rem; font-weight: 700; text-align: center;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .45);
+}
+.toast.show { animation: toastIn .3s ease; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 560px) {
+  .decks { gap: 8px; }
+  .deck { padding: 12px 10px 10px; }
+  .deck-mode { padding: 11px 8px; font-size: .88rem; gap: 6px; }
+  .lm { flex-direction: row; }
+  .rc-head { padding-right: 104px; }
+}
+@media (prefers-reduced-motion: reduce) { .toast.show { animation: none; } }
+
+#screen-study[data-deck="rc"] .flip-tip { display: none; }
+.choices.terms .choice { padding-left: 44px; padding-right: 12px; overflow-wrap: anywhere; }

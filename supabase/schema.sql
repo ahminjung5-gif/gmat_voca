@@ -14,7 +14,7 @@ create table if not exists public.profiles (
 -- 단어별 기록 (모드별로 따로)
 create table if not exists public.word_stats (
   user_id uuid not null references auth.users (id) on delete cascade,
-  mode text not null check (mode in ('m', 'v')),
+  mode text not null check (mode in ('m', 'v', 'r')),
   word text not null,
   correct int not null default 0,
   wrong int not null default 0,
@@ -32,6 +32,8 @@ create table if not exists public.daily_activity (
   correct int not null default 0,
   seconds int not null default 0,
   viewed int not null default 0,          -- 공부 모드에서 본 카드 수
+  voca_done boolean,                      -- 그날 VOCA Day 하나를 끝까지 봤는지
+  rc_done boolean,                        -- 그날 RC set Day 하나를 끝까지 봤는지
   primary key (user_id, day)
 );
 

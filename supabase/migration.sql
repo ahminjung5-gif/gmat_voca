@@ -1,5 +1,5 @@
 -- =========================================================
--- 업데이트용 SQL: 공부 모드 + 외운 단어/헷갈리는 단어 구분
+-- 업데이트용 SQL: 공부 모드, 외운/헷갈리는 단어 구분, RC set, 새 연속 학습 기준
 -- (이미 schema.sql 을 실행한 프로젝트에서 실행)
 -- Supabase 대시보드 > SQL Editor 에 전체를 붙여넣고 Run 하세요.
 -- 여러 번 실행해도 안전합니다.
@@ -40,5 +40,13 @@ create policy "own study_progress" on public.study_progress
 alter table public.bookmarks add column if not exists status text not null default 'vague';
 alter table public.bookmarks drop constraint if exists bookmarks_status_check;
 alter table public.bookmarks add constraint bookmarks_status_check check (status in ('known', 'vague'));
+
+-- RC set 게임 기록(mode = 'r') 허용
+alter table public.word_stats drop constraint if exists word_stats_mode_check;
+alter table public.word_stats add constraint word_stats_mode_check check (mode in ('m', 'v', 'r'));
+
+-- 연속 학습 기준: 그날 VOCA Day 1개, RC set Day 1개를 끝까지 봤는지
+alter table public.daily_activity add column if not exists voca_done boolean;
+alter table public.daily_activity add column if not exists rc_done boolean;
 
 grant select, insert, update, delete on public.bookmarks, public.study_progress to authenticated;

@@ -68,12 +68,10 @@
   <main id="app">
 
     <!-- ========== 1. 설정 화면 ========== -->
-    <section id="screen-setup" class="screen active" aria-labelledby="setup-title">
+    <!-- ========== 1. 첫 화면: 기록 + 모드 선택 ========== -->
+    <section id="screen-home" class="screen active" aria-labelledby="home-title">
       <header class="setup-head">
-        <div>
-          <h1 id="setup-title"><svg class="ic logo" aria-hidden="true"><use href="#i-terminal"/></svg>GMAT VOCA<span class="cursor" aria-hidden="true"></span></h1>
-          <p class="lede">오늘 볼 Day를 고르세요. 하루 한 묶음씩 쌓으면, 그게 점수가 됩니다.</p>
-        </div>
+        <h1 id="home-title"><svg class="ic logo" aria-hidden="true"><use href="#i-terminal"/></svg>GMAT VOCA<span class="cursor" aria-hidden="true"></span></h1>
         <div class="head-actions">
           <div id="user-box" class="user-box"></div>
           <button type="button" class="icon-btn lg" data-theme-toggle aria-label="테마 바꾸기">
@@ -82,11 +80,6 @@
           </button>
         </div>
       </header>
-
-      <div class="view-seg" role="tablist" aria-label="모드">
-        <button type="button" role="tab" data-view="game" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg>게임</button>
-        <button type="button" role="tab" data-view="study" aria-selected="false"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>공부</button>
-      </div>
 
       <div class="panel records">
         <div class="panel-row">
@@ -102,21 +95,68 @@
             <div class="streak-next" id="streak-next"></div>
           </div>
         </div>
-        <div class="kpis three">
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-book-check"/></svg><span><b id="k-known" class="num">0</b>개</span><small>오늘 외운 단어</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 단어</small></div>
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><span><b id="k-flag" class="num">0</b>개</span><small>헷갈리는 단어</small></div>
-        </div>
-        <div class="records-foot">
-          <details class="recent">
-            <summary>최근 학습 <span id="recent-count" class="muted"></span></summary>
-            <ul id="recent-list" class="recent-list"></ul>
-          </details>
-          <div class="records-btns">
-            <button type="button" id="btn-wordbook" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg>단어장 열기</button>
+        <div class="today-cond">
+          <p class="today-title">오늘의 연속 학습 조건</p>
+          <div class="cond" id="cond-voca">
+            <span class="ck" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>
+            <div class="cond-body">
+              <div class="cond-row"><span>VOCA Day 1개 <small class="muted cond-day"></small></span><span class="num cond-n"></span></div>
+              <div class="cond-bar"><i></i></div>
+            </div>
+          </div>
+          <div class="cond" id="cond-rc">
+            <span class="ck" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>
+            <div class="cond-body">
+              <div class="cond-row"><span>RC set Day 1개 <small class="muted cond-day"></small></span><span class="num cond-n"></span></div>
+              <div class="cond-bar"><i></i></div>
+            </div>
           </div>
         </div>
+        <div class="kpis three">
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-book-check"/></svg><span><b id="k-known" class="num">0</b>개</span><small>오늘 외운 단어</small></div>
+          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 문제</small></div>
+          <div class="kpi vague"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><span><b id="k-flag" class="num">0</b>개</span><small>헷갈리는 단어</small></div>
+        </div>
         <p id="login-nudge" class="nudge" hidden></p>
+      </div>
+
+      <h2 class="section-title">무엇을 공부할까요?</h2>
+      <div class="decks">
+        <div class="deck" data-deck="voca">
+          <div class="deck-head">
+            <p class="deck-title">VOCA</p>
+            <p class="deck-sub">Day 36개 · 하루 100개</p>
+            <p class="deck-status" id="deck-status-voca"></p>
+          </div>
+          <button type="button" class="deck-mode" data-go="voca:study"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>Study mode</button>
+          <button type="button" class="deck-mode" data-go="voca:game"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg>Game mode</button>
+        </div>
+        <div class="deck" data-deck="rc">
+          <div class="deck-head">
+            <p class="deck-title">RC set</p>
+            <p class="deck-sub">Day 45개 · 하루 30세트</p>
+            <p class="deck-status" id="deck-status-rc"></p>
+          </div>
+          <button type="button" class="deck-mode" data-go="rc:study"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>Study mode</button>
+          <button type="button" class="deck-mode" data-go="rc:game"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg>Game mode</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 2. Day / 옵션 선택 ========== -->
+    <section id="screen-setup" class="screen" aria-labelledby="setup-title" data-deck="voca" data-view="study">
+      <div class="hud">
+        <button type="button" id="setup-back" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span>처음으로</span></button>
+        <div class="hud-right">
+          <button type="button" id="btn-wordbook" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-notebook"/></svg>단어장</button>
+          <button type="button" class="icon-btn" data-theme-toggle aria-label="테마 바꾸기">
+            <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+            <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="setup-title-row">
+        <h1 id="setup-title"><span id="setup-deck">VOCA</span> <span class="muted" id="setup-mode">Study mode</span></h1>
       </div>
 
       <div class="panel">
@@ -130,7 +170,7 @@
         <div id="day-grid" class="day-grid" role="group" aria-label="Day 선택"></div>
       </div>
 
-      <div class="panel only-game">
+      <div class="panel only-voca-game">
         <h2>학습 방법</h2>
         <div class="mode-grid" role="radiogroup" aria-label="학습 방법">
           <label class="mode">
@@ -146,11 +186,15 @@
             <span class="mode-body">
               <svg class="ic mode-ic" aria-hidden="true"><use href="#i-branch"/></svg>
               <strong>유의어·파생어 맞히기</strong>
-              <span class="mode-desc">보기마다 단어 하나. 이 단어와 관련 있는 것, 또는 관련 없는 것을 고릅니다.</span>
+              <span class="mode-desc">보기마다 단어 하나. 유의어·파생어인 것, 또는 아닌 것을 고릅니다.</span>
             </span>
           </label>
         </div>
-        <p class="hint-line flush">헷갈리는 단어와 자주 틀린 단어가 먼저 나오고, 나머지는 무작위로 섞여요.</p>
+      </div>
+
+      <div class="panel only-rc-game">
+        <h2>게임 방식</h2>
+        <p class="hint-line flush">표제어를 보고 "유의어인 것"과 "유의어가 아닌 것"을 고르는 문제가 무작위로 나와요. 보기는 단어 하나씩이에요.</p>
       </div>
 
       <div class="panel only-study">
@@ -170,19 +214,20 @@
             <button type="button" data-v="shuf" role="radio">섞기</button>
           </div>
         </div>
-        <div class="opt-group">
+        <div class="opt-group only-voca">
           <span class="opt-label">카드 앞면</span>
           <div class="pills" id="st-front" role="radiogroup" aria-label="카드 앞면">
             <button type="button" data-v="word" role="radio">단어 먼저</button>
             <button type="button" data-v="mean" role="radio">뜻 먼저</button>
           </div>
         </div>
+        <p class="hint-line flush only-study">고른 Day의 카드를 끝까지 다 보면 오늘의 연속 학습 조건이 채워져요.</p>
       </div>
 
       <div class="start-bar">
         <p id="selection-summary" aria-live="polite">Day를 하나 이상 선택하세요.</p>
         <button type="button" id="btn-start" class="btn primary" disabled>
-          <svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span class="label">학습 시작</span>
+          <svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span class="label">시작</span>
         </button>
       </div>
     </section>
@@ -299,8 +344,10 @@
           <button type="button" id="sd-prev" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>이전</button>
           <button type="button" id="sd-next" class="btn ghost"><span>다음</span><svg class="ic" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
         </div>
-        <p class="study-tip">카드를 누르면 뒤집혀요. 좌우로 밀어서 넘길 수 있어요. <span class="kbd-tip">← → 넘기기, 스페이스 뒤집기, 1 오키, 2 애매, L 리스트</span></p>
+        <p class="study-tip"><span class="flip-tip">카드를 누르면 뒤집혀요. </span>좌우로 밀어서 넘길 수 있어요. <span class="kbd-tip">← → 넘기기,<span class="flip-tip"> 스페이스 뒤집기,</span> 1 오키, 2 애매, L 리스트</span></p>
       </div>
+
+      <div id="sd-toast" class="toast" role="status" hidden></div>
 
       <!-- 리스트 보기 -->
       <div id="sd-list-view" hidden>
@@ -360,7 +407,7 @@
       <div class="wb-actions">
         <button type="button" id="wb-study" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>카드로 보기</button>
         <button type="button" id="wb-game-m" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg>뜻 맞히기 게임</button>
-        <button type="button" id="wb-game-v" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg>유의어 게임</button>
+        <button type="button" id="wb-game-v" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg><span>유의어 게임</span></button>
       </div>
       <div class="wb-tools">
         <label class="search">
@@ -473,6 +520,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
   <script src="data/words.js"></script>
+  <script src="data/rcsets.js"></script>
   <script src="store.js"></script>
   <script src="mascot.js"></script>
   <script src="app.js"></script>

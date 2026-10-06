@@ -35,6 +35,8 @@
   let flushTimer = null;
 
   /* ---------- 날짜 (내 기기 시간 기준) ---------- */
+  // vd / rd = 그날 VOCA / RC set Day 하나를 끝까지 봤는지 (예전 기록은 undefined)
+  const newDay = () => ({ n: 0, c: 0, sec: 0, v: 0, vd: false, rd: false });
   function dayKey(d = new Date()) {
     const p = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
@@ -46,7 +48,7 @@
     try {
       localStorage.setItem(lsKey(), JSON.stringify({
         profile: state.profile, stats: state.stats, daily: state.daily, sessions: state.sessions.slice(0, 60),
-        marks: state.marks, studyPos: state.studyPos,
+        marks: state.marks, studyPos: state.studyPos, todayViews: state.todayViews,
         pendingStudySync: !!(state.user && state.needsMigration) || undefined,
       }));
     } catch (_) {}
@@ -64,6 +66,7 @@
     state.sessions = (d && d.sessions) || [];
     state.marks = normMarks(d && (d.marks || d.flags));
     state.studyPos = (d && d.studyPos) || {};
+    state.todayViews = (d && d.todayViews) || null;
   }
 
   /* ---------- 기록 남기기 ---------- */
@@ -81,7 +84,7 @@
     dirtyStats.add(k);
 
     const dk = dayKey();
-    const day = state.daily[dk] || { n: 0, c: 0, sec: 0, v: 0 };
+    const day = state.daily[dk] || newDay();
     day.n++; if (ok) day.c++;
     day.sec += Math.max(0, Math.round(seconds || 0));
     state.daily[dk] = day;
@@ -91,16 +94,41 @@
     scheduleFlush();
   }
 
-  // 공부 모드에서 카드 한 장을 본 것 (연속 학습일에 포함)
-  function recordView(onlyMarkActive) {
+  // 공부 모드에서 카드 한 장을 본 것
+  // deck: "voca" | "rc", dayNo: 그 카드의 Day, key: 카드 키, total: 그 Day의 카드 수
+  function todayViewsFor(deck) {
+    const t = dayKey();
+    if (!state.todayViews || state.todayViews.date !== t) state.todayViews = { date: t, voca: {}, rc: {} };
+    return state.todayViews[deck];
+  }
+  function recordView(deck, dayNo, key, total) {
     const dk = dayKey();
-    const day = state.daily[dk] || { n: 0, c: 0, sec: 0, v: 0 };
-    if (onlyMarkActive) { if ((day.v || 0) > 0 || day.n > 0) return; }
-    day.v = (day.v || 0) + 1;
-    state.daily[dk] = day;
-    dirtyDays.add(dk);
-    saveLocal();
-    scheduleFlush();
+    const day = state.daily[dk] || newDay();
+    const views = todayViewsFor(deck);
+    const list = views[dayNo] || (views[dayNo] = []);
+    if (!list.includes(key)) {
+      list.push(key);
+      day.v = (day.v || 0) + 1;
+      const flag = deck === "rc" ? "rd" : "vd";
+      if (!day[flag] && total && list.length >= total) { day[flag] = true; emit(); }
+      if (day.vd === undefined) day.vd = false;
+      if (day.rd === undefined) day.rd = false;
+      state.daily[dk] = day;
+      dirtyDays.add(dk);
+      saveLocal();
+      scheduleFlush();
+    }
+  }
+  // 오늘 덱별로 Day마다 본 카드 수: { [day]: count }
+  function todayViewCounts(deck) {
+    const v = todayViewsFor(deck);
+    const out = {};
+    Object.keys(v).forEach((d) => { out[d] = v[d].length; });
+    return out;
+  }
+  function todayDone(deck) {
+    const x = state.daily[dayKey()];
+    return !!(x && x[deck === "rc" ? "rd" : "vd"]);
   }
 
   // 헷갈리는 단어 체크 / 해제
@@ -122,7 +150,6 @@
     if (status) state.marks[word] = { s: status, at: new Date().toISOString() };
     else delete state.marks[word];
     dirtyMarks.add(word);
-    if (status) recordView(true);   // 체크도 공부한 것으로 침
     saveLocal();
     scheduleFlush();
     emit();
@@ -184,7 +211,8 @@
     if (!state.user || !sb) return;
     if (!dirtyStats.size && !dirtyDays.size && !dirtyMarks.size && !dirtyPos.size) return;
     const uid = state.user.id;
-    const statRows = [...dirtyStats].map((k) => {
+    const statKeys = [...dirtyStats].filter((k) => !(state.needsMigration && k.startsWith("r:")));
+    const statRows = statKeys.map((k) => {
       const i = k.indexOf(":");
       const s = state.stats[k];
       return { user_id: uid, mode: k.slice(0, i), word: k.slice(i + 1), correct: s.c, wrong: s.w, streak: s.s, last_seen: s.last, in_note: s.note };
@@ -192,14 +220,18 @@
     const dayRows = [...dirtyDays].map((d) => {
       const v = state.daily[d];
       const row = { user_id: uid, day: d, answered: v.n, correct: v.c, seconds: v.sec };
-      if (!state.needsMigration) row.viewed = v.v || 0;
+      if (!state.needsMigration) {
+        row.viewed = v.v || 0;
+        row.voca_done = v.vd === undefined ? null : !!v.vd;
+        row.rc_done = v.rd === undefined ? null : !!v.rd;
+      }
       return row;
     });
     const flagAdds = [], flagDels = [];
     dirtyMarks.forEach((w) => (state.marks[w] ? flagAdds : flagDels).push(w));
     const posRows = [...dirtyPos].map((k) => ({ user_id: uid, key: k, idx: state.studyPos[k] || 0, updated_at: new Date().toISOString() }));
     const extraOk = !state.needsMigration;
-    dirtyStats.clear(); dirtyDays.clear();
+    statKeys.forEach((k) => dirtyStats.delete(k)); dirtyDays.clear();
     if (extraOk) { dirtyMarks.clear(); dirtyPos.clear(); }
     setSync("saving");
     try {
@@ -255,10 +287,13 @@
   async function loadCloud() {
     setSync("saving");
     const uid = state.user.id;
+    // 이번 업데이트용 SQL(migration.sql)을 실행했는지 확인
+    const probe = await sb.from("daily_activity").select("voca_done").limit(1);
+    const hasV3 = !probe.error;
     const [{ data: prof }, statRows, dayRows, { data: sessRows }] = await Promise.all([
       sb.from("profiles").select("nickname").eq("id", uid).maybeSingle(),
       fetchAll("word_stats", "mode,word,correct,wrong,streak,last_seen,in_note"),
-      fetchAll("daily_activity", "day,answered,correct,seconds"),
+      fetchAll("daily_activity", hasV3 ? "day,answered,correct,seconds,viewed,voca_done,rc_done" : "day,answered,correct,seconds"),
       sb.from("sessions").select("played_at,mode,days,total,correct,wrong,hints,result,duration_sec").order("played_at", { ascending: false }).limit(60),
     ]);
 
@@ -269,9 +304,9 @@
       const { data, error } = await sb.from("study_progress").select("key,idx");
       if (error) throw error;
       posRows = data || [];
-      state.needsMigration = false;
+      state.needsMigration = !hasV3;
     } catch (e) {
-      console.warn("공부 모드 테이블이 없어요. supabase/migration_study.sql 을 실행하세요.", e);
+      console.warn("새 테이블이 없어요. supabase/migration.sql 을 실행하세요.", e);
       state.needsMigration = true;
     }
 
@@ -284,7 +319,17 @@
       state.stats[`${r.mode}:${r.word}`] = { c: r.correct, w: r.wrong, s: r.streak, last: r.last_seen, note: r.in_note };
     });
     state.daily = {};
-    dayRows.forEach((r) => { state.daily[r.day] = { n: r.answered, c: r.correct, sec: r.seconds, v: r.viewed || 0 }; });
+    const localDaily = (loadLocal() || {}).daily || {};
+    dayRows.forEach((r) => {
+      const x = { n: r.answered, c: r.correct, sec: r.seconds, v: r.viewed || 0 };
+      if (r.voca_done !== undefined && r.voca_done !== null) x.vd = r.voca_done;
+      if (r.rc_done !== undefined && r.rc_done !== null) x.rd = r.rc_done;
+      // SQL 실행 전이라 클라우드에 완료 표시가 없으면 이 기기 기록을 사용
+      const l = localDaily[r.day];
+      if (l) { if (x.vd === undefined && l.vd !== undefined) x.vd = l.vd; if (x.rd === undefined && l.rd !== undefined) x.rd = l.rd; }
+      state.daily[r.day] = x;
+    });
+    Object.keys(localDaily).forEach((k) => { if (!state.daily[k]) { state.daily[k] = localDaily[k]; dirtyDays.add(k); } });
     if (!state.needsMigration) {
       const cached = loadLocal();
       state.marks = {};
@@ -385,23 +430,30 @@
   function wordStat(mode, word) { return state.stats[`${mode}:${word}`] || null; }
 
   // 먼저 출제할 단어일수록 큰 값: 헷갈리는 단어 > 자주 틀린 단어 > 나머지(무작위)
-  function priority(mode, word) {
+  function priority(mode, word, markKey) {
     const s = wordStat(mode, word);
-    const m = getMark(word);
+    const m = getMark(markKey || word);
     return (m === "vague" ? 4 : m === "known" ? -2 : 0) + (s ? Math.min(s.w, 4) * 0.8 : 0);
   }
 
+  function dayMet(x, key) {
+    if (!x) return false;
+    if (x.vd === undefined && x.rd === undefined) {
+      if (key === dayKey()) return false;                 // 오늘은 새 규칙으로
+      return x.n > 0 || (x.v || 0) > 0;                   // 규칙이 바뀌기 전 기록
+    }
+    return !!(x.vd && x.rd);
+  }
   function streakDays() {
     let n = 0;
     const d = new Date();
-    if (!state.daily[dayKey(d)]) d.setDate(d.getDate() - 1);   // 오늘 아직 안 했으면 어제부터 셈
-    const active = (x) => x && (x.n > 0 || (x.v || 0) > 0);
-    while (active(state.daily[dayKey(d)])) { n++; d.setDate(d.getDate() - 1); }
+    if (!dayMet(state.daily[dayKey(d)], dayKey(d))) d.setDate(d.getDate() - 1);   // 오늘 아직 조건을 못 채웠으면 어제부터 셈
+    while (dayMet(state.daily[dayKey(d)], dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
     return n;
   }
 
   function bestStreak() {
-    const days = Object.keys(state.daily).filter((k) => { const x = state.daily[k]; return x && (x.n > 0 || (x.v || 0) > 0); }).sort();
+    const days = Object.keys(state.daily).filter((k) => dayMet(state.daily[k], k)).sort();
     let best = 0, cur = 0, prev = null;
     days.forEach((k) => {
       const d = new Date(k + "T00:00:00");
@@ -442,6 +494,7 @@
     state, hasCloud,
     init, onChange: (fn) => listeners.add(fn),
     recordAnswer, recordSession, recordView, flush,
+    todayViewCounts, todayDone,
     getMark, setMark, toggleMark, isFlagged, isKnown, toggleFlag, markedWords, countMarks, todayKnown, bestStreak,
     getStudyPos, setStudyPos,
     signInGoogle, signInEmail, signOut, setNickname,
