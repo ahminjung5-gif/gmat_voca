@@ -81,7 +81,7 @@ create table if not exists public.bookmarks (
   user_id uuid not null references auth.users (id) on delete cascade,
   word text not null,
   created_at timestamptz not null default now(),
-  status text not null default 'vague' check (status in ('known', 'vague')),  -- known=외운 단어, vague=헷갈리는 단어
+  status text not null default 'vague' check (status in ('known', 'vague', 'hard')),  -- vague=애매, hard=어렵
   primary key (user_id, word)
 );
 
@@ -106,3 +106,15 @@ create policy "own study_progress" on public.study_progress
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 grant select, insert, update, delete on public.bookmarks, public.study_progress to authenticated;
+
+-- 공부 모드에서 한 번이라도 본 카드 (Day 진도 막대)
+create table if not exists public.seen_cards (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  key text not null,
+  seen_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+alter table public.seen_cards enable row level security;
+drop policy if exists "own seen_cards" on public.seen_cards;
+create policy "own seen_cards" on public.seen_cards
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

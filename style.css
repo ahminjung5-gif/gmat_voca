@@ -770,3 +770,51 @@ kbd {
 
 #screen-study[data-deck="rc"] .flip-tip { display: none; }
 .choices.terms .choice { padding-left: 44px; padding-right: 12px; overflow-wrap: anywhere; }
+
+/* =========================================================
+   공부 화면 상단 고정
+   ========================================================= */
+.sd-sticky {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 6;
+  background: var(--bg); margin: -32px -18px 0; padding: 14px 18px 12px;
+  border-bottom: 1px solid transparent; transition: border-color .15s ease;
+}
+.sd-sticky .hud { margin-bottom: 12px; }
+.sd-sticky .sd-top { margin-bottom: 0; }
+#sd-card-view, #sd-list-view { margin-top: 6px; }
+.sd-sticky { border-bottom-color: var(--line); }
+@media (max-width: 560px) { .sd-sticky { margin: -20px -12px 0; padding: 12px 12px 10px; } }
+
+/* =========================================================
+   애매 / 어렵
+   ========================================================= */
+.btn.ghost.mark-btn.hard.on { border-color: var(--bad); background: var(--bad-tint); color: var(--bad); }
+.btn.ghost.mark-btn.hard:hover:not(:disabled) { border-color: var(--bad); }
+.mark-tag.hard { color: var(--bad); border-color: var(--bad); background: var(--bad-tint); }
+.mark-mini.hard.on { color: var(--bad); border-color: var(--bad); background: var(--bad-tint); }
+.mark-pill.hard { color: var(--bad); border-color: var(--bad); background: var(--bad-tint); }
+.kpi.hard .ic { color: var(--bad); }
+.stat.vague { border-color: var(--amber); background: var(--amber-tint); }
+.stat.vague .stat-num { color: var(--amber); }
+.stat.hard { border-color: var(--bad); background: var(--bad-tint); }
+.stat.hard .stat-num { color: var(--bad); }
+#screen-wordbook [data-wbtab="hard"][aria-selected="true"] { background: var(--bad-tint); border-color: var(--bad); color: var(--bad); }
+#wb-tabs.three { grid-template-columns: repeat(3, 1fr); }
+#wb-tabs.three button { font-size: .86rem; padding: 10px 6px; }
+
+/* Day 칸 배지 두 개 */
+.day-chip .badges { position: absolute; top: -7px; right: -5px; display: flex; gap: 2px; z-index: 1; }
+.day-chip .badges .fl { position: static; }
+.day-chip .fl.hard { border-color: var(--bad); color: var(--bad); }
+
+/* RC set 유의어 칩: 눌러서 헷갈리는 유의어 체크 */
+button.syn { font: inherit; font-family: var(--mono); font-size: .84rem; color: var(--text); cursor: pointer; transition: border-color .12s ease, background-color .12s ease, color .12s ease; }
+button.syn:hover { border-color: var(--amber); }
+button.syn.on { border-color: var(--amber); background: var(--amber-tint); color: var(--amber); font-weight: 700; }
+.wb-row > button.syn { flex: none; font-size: .76rem; padding: 5px 9px; }
+#screen-study:not([data-deck="rc"]) .rc-tip { display: none; }
+#wb-tabs .short { display: none; }
+#wb-tabs.three .full { display: none; }
+#wb-tabs.three .short { display: inline; }
+#wb-tabs.three button .ic { display: none; }
+#screen-wordbook [data-wbtab="syn"][aria-selected="true"] { background: var(--amber-tint); border-color: var(--amber); color: var(--amber); }

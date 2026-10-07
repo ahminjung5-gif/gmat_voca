@@ -23,7 +23,9 @@
     stats: {},          // "m:word" -> { c, w, s, last, note }
     daily: {},          // "2026-10-05" -> { n, c, sec }
     sessions: [],       // 최근 학습 기록 (최신순)
-    marks: {},          // 단어 체크: word -> { s: "known"(오키=외운 단어) | "vague"(애매=헷갈리는 단어), at: 체크한 시각 }
+    marks: {},          // 체크: key -> { s: "vague"(애매=헷갈리는) | "hard"(어렵=어려운), at: 체크한 시각 }
+                        //   key: VOCA 단어 / "rc:표제어" / "rcsyn:표제어|유의어"(RC set 유의어 하나)
+    seen: {},           // 공부 모드에서 한 번이라도 본 카드: key -> true
     studyPos: {},       // 공부 모드 이어보기: key -> 위치
     needsMigration: false, // Supabase에 새 SQL(공부 모드용)이 아직 없으면 true
     sync: hasCloud ? "idle" : "local",   // local | idle | saving | error
@@ -48,7 +50,7 @@
     try {
       localStorage.setItem(lsKey(), JSON.stringify({
         profile: state.profile, stats: state.stats, daily: state.daily, sessions: state.sessions.slice(0, 60),
-        marks: state.marks, studyPos: state.studyPos, todayViews: state.todayViews,
+        marks: state.marks, studyPos: state.studyPos, todayViews: state.todayViews, seen: state.seen,
         pendingStudySync: !!(state.user && state.needsMigration) || undefined,
       }));
     } catch (_) {}
@@ -67,6 +69,7 @@
     state.marks = normMarks(d && (d.marks || d.flags));
     state.studyPos = (d && d.studyPos) || {};
     state.todayViews = (d && d.todayViews) || null;
+    state.seen = (d && d.seen) || {};
   }
 
   /* ---------- 기록 남기기 ---------- */
@@ -137,15 +140,16 @@
     const out = {};
     Object.entries(m || {}).forEach(([w, v]) => {
       if (typeof v === "string") out[w] = { s: "vague", at: v };
-      else if (v && (v.s === "known" || v.s === "vague")) out[w] = { s: v.s, at: v.at || new Date().toISOString() };
+      else if (v && (v.s === "vague" || v.s === "hard")) out[w] = { s: v.s, at: v.at || new Date().toISOString() };
+      // 예전 "오키"(known) 체크는 없앰
     });
     return out;
   }
   const dirtyMarks = new Set();
   function getMark(word) { return state.marks[word] ? state.marks[word].s : null; }
   function isFlagged(word) { return getMark(word) === "vague"; }
-  function isKnown(word) { return getMark(word) === "known"; }
-  // status: "known" | "vague" | null(해제)
+  function isHard(word) { return getMark(word) === "hard"; }
+  // status: "vague" | "hard" | null(해제)
   function setMark(word, status) {
     if (status) state.marks[word] = { s: status, at: new Date().toISOString() };
     else delete state.marks[word];
@@ -163,12 +167,17 @@
       .sort((a, b) => (a[1].at < b[1].at ? 1 : -1)).map(([w, v]) => ({ word: w, at: v.at }));
   }
   function countMarks(status) { let n = 0; for (const k in state.marks) if (state.marks[k].s === status) n++; return n; }
-  function todayKnown() {
-    const t = dayKey();
-    let n = 0;
-    for (const k in state.marks) { const v = state.marks[k]; if (v.s === "known" && dayKey(new Date(v.at)) === t) n++; }
-    return n;
+  // 공부 모드에서 본 카드 (Day 진도 막대용, 누적)
+  const dirtySeen = new Set();
+  function markSeen(key) {
+    if (state.seen[key]) return;
+    state.seen[key] = true;
+    dirtySeen.add(key);
+    saveLocal();
+    scheduleFlush();
   }
+  function isSeen(key) { return !!state.seen[key]; }
+
 
   // 공부 모드 이어보기 위치
   const dirtyPos = new Set();
@@ -209,7 +218,7 @@
   async function flush() {
     clearTimeout(flushTimer);
     if (!state.user || !sb) return;
-    if (!dirtyStats.size && !dirtyDays.size && !dirtyMarks.size && !dirtyPos.size) return;
+    if (!dirtyStats.size && !dirtyDays.size && !dirtyMarks.size && !dirtyPos.size && !dirtySeen.size) return;
     const uid = state.user.id;
     const statKeys = [...dirtyStats].filter((k) => !(state.needsMigration && k.startsWith("r:")));
     const statRows = statKeys.map((k) => {
@@ -232,7 +241,8 @@
     const posRows = [...dirtyPos].map((k) => ({ user_id: uid, key: k, idx: state.studyPos[k] || 0, updated_at: new Date().toISOString() }));
     const extraOk = !state.needsMigration;
     statKeys.forEach((k) => dirtyStats.delete(k)); dirtyDays.clear();
-    if (extraOk) { dirtyMarks.clear(); dirtyPos.clear(); }
+    const seenRows = extraOk ? [...dirtySeen].map((k) => ({ user_id: uid, key: k })) : [];
+    if (extraOk) { dirtyMarks.clear(); dirtyPos.clear(); dirtySeen.clear(); }
     setSync("saving");
     try {
       for (let i = 0; i < statRows.length; i += 500) {
@@ -254,6 +264,10 @@
         const { error } = await sb.from("bookmarks").delete().eq("user_id", uid).in("word", flagDels);
         if (error) throw error;
       }
+      for (let i = 0; i < seenRows.length; i += 500) {
+        const { error } = await sb.from("seen_cards").upsert(seenRows.slice(i, i + 500), { onConflict: "user_id,key", ignoreDuplicates: true });
+        if (error) throw error;
+      }
       if (extraOk && posRows.length) {
         const { error } = await sb.from("study_progress").upsert(posRows, { onConflict: "user_id,key" });
         if (error) throw error;
@@ -266,6 +280,7 @@
       dayRows.forEach((r) => dirtyDays.add(r.day));
       flagAdds.concat(flagDels).forEach((w) => dirtyMarks.add(w));
       posRows.forEach((r) => dirtyPos.add(r.key));
+      seenRows.forEach((r) => dirtySeen.add(r.key));
       setSync("error");
       clearTimeout(flushTimer);
       flushTimer = setTimeout(flush, 15000);
@@ -289,7 +304,8 @@
     const uid = state.user.id;
     // 이번 업데이트용 SQL(migration.sql)을 실행했는지 확인
     const probe = await sb.from("daily_activity").select("voca_done").limit(1);
-    const hasV3 = !probe.error;
+    const probe2 = await sb.from("seen_cards").select("key").limit(1);
+    const hasV3 = !probe.error && !probe2.error;
     const [{ data: prof }, statRows, dayRows, { data: sessRows }] = await Promise.all([
       sb.from("profiles").select("nickname").eq("id", uid).maybeSingle(),
       fetchAll("word_stats", "mode,word,correct,wrong,streak,last_seen,in_note"),
@@ -305,6 +321,13 @@
       if (error) throw error;
       posRows = data || [];
       state.needsMigration = !hasV3;
+      if (hasV3) {
+        const seenRows = await fetchAll("seen_cards", "key");
+        const localSeen = (loadLocal() || {}).seen || {};
+        state.seen = {};
+        seenRows.forEach((r) => { state.seen[r.key] = true; });
+        Object.keys(localSeen).forEach((k) => { if (!state.seen[k]) { state.seen[k] = true; dirtySeen.add(k); } });
+      }
     } catch (e) {
       console.warn("새 테이블이 없어요. supabase/migration.sql 을 실행하세요.", e);
       state.needsMigration = true;
@@ -333,7 +356,10 @@
     if (!state.needsMigration) {
       const cached = loadLocal();
       state.marks = {};
-      flagRows.forEach((r) => { state.marks[r.word] = { s: r.status === "known" ? "known" : "vague", at: r.created_at }; });
+      flagRows.forEach((r) => {
+        if (r.status === "vague" || r.status === "hard") state.marks[r.word] = { s: r.status, at: r.created_at };
+        else dirtyMarks.add(r.word);   // 예전 "오키" 체크는 지움
+      });
       state.studyPos = {};
       posRows.forEach((r) => { state.studyPos[r.key] = r.idx; });
       // SQL을 실행하기 전에 이 기기에만 저장해 둔 단어장이 있으면 올림
@@ -380,7 +406,7 @@
     }
     saveLocal();
     setSync("idle");
-    if (dirtyMarks.size || dirtyPos.size) flush();
+    if (dirtyMarks.size || dirtyPos.size || dirtySeen.size) flush();
   }
 
   async function onUser(user) {
@@ -433,7 +459,7 @@
   function priority(mode, word, markKey) {
     const s = wordStat(mode, word);
     const m = getMark(markKey || word);
-    return (m === "vague" ? 4 : m === "known" ? -2 : 0) + (s ? Math.min(s.w, 4) * 0.8 : 0);
+    return (m === "hard" ? 5 : m === "vague" ? 4 : 0) + (s ? Math.min(s.w, 4) * 0.8 : 0);
   }
 
   function dayMet(x, key) {
@@ -495,7 +521,7 @@
     init, onChange: (fn) => listeners.add(fn),
     recordAnswer, recordSession, recordView, flush,
     todayViewCounts, todayDone,
-    getMark, setMark, toggleMark, isFlagged, isKnown, toggleFlag, markedWords, countMarks, todayKnown, bestStreak,
+    getMark, setMark, toggleMark, isFlagged, isHard, toggleFlag, markedWords, countMarks, bestStreak, markSeen, isSeen,
     getStudyPos, setStudyPos,
     signInGoogle, signInEmail, signOut, setNickname,
     wordStat, priority, streakDays, lastDays, dayKey,

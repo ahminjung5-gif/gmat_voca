@@ -62,6 +62,7 @@
       <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
       <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></symbol>
       <symbol id="i-book-check" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="m9 9.5 2 2 4-4"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
     </defs>
   </svg>
 
@@ -113,9 +114,9 @@
           </div>
         </div>
         <div class="kpis three">
-          <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-book-check"/></svg><span><b id="k-known" class="num">0</b>개</span><small>오늘 외운 단어</small></div>
           <div class="kpi"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span><b id="k-today" class="num">0</b>개</span><small>오늘 푼 문제</small></div>
           <div class="kpi vague"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><span><b id="k-flag" class="num">0</b>개</span><small>헷갈리는 단어</small></div>
+          <div class="kpi hard"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><span><b id="k-hard" class="num">0</b>개</span><small>어려운 단어</small></div>
         </div>
         <p id="login-nudge" class="nudge" hidden></p>
       </div>
@@ -203,8 +204,9 @@
           <span class="opt-label">어떤 단어를 볼까요</span>
           <div class="pills" id="st-filter" role="radiogroup" aria-label="볼 단어">
             <button type="button" data-v="all" role="radio">전체</button>
-            <button type="button" data-v="flag" role="radio">헷갈리는 단어 <span class="num"></span></button>
-            <button type="button" data-v="unknown" role="radio">안 외운 단어 <span class="num"></span></button>
+            <button type="button" data-v="vague" role="radio">애매 <span class="num"></span></button>
+            <button type="button" data-v="hard" role="radio">어렵 <span class="num"></span></button>
+            <button type="button" data-v="marked" role="radio">애매+어렵 <span class="num"></span></button>
           </div>
         </div>
         <div class="opt-group">
@@ -303,6 +305,7 @@
 
     <!-- ========== 공부 모드 ========== -->
     <section id="screen-study" class="screen" aria-label="공부 모드">
+      <div class="sd-sticky">
       <div class="hud">
         <button type="button" id="sd-exit" class="btn ghost small"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span>나가기</span></button>
         <span id="sd-label" class="chip"></span>
@@ -321,6 +324,7 @@
         </div>
         <div class="sd-progress" aria-hidden="true"><i id="sd-bar"></i></div>
       </div>
+      </div>
 
       <!-- 카드 보기 -->
       <div id="sd-card-view">
@@ -337,14 +341,14 @@
           </div>
         </div>
         <div class="mark-row">
-          <button type="button" id="sd-ok" class="btn ghost mark-btn ok"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>오키</button>
           <button type="button" id="sd-vague" class="btn ghost mark-btn vague"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>애매</button>
+          <button type="button" id="sd-hard" class="btn ghost mark-btn hard"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>어렵</button>
         </div>
         <div class="study-nav">
           <button type="button" id="sd-prev" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>이전</button>
           <button type="button" id="sd-next" class="btn ghost"><span>다음</span><svg class="ic" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
         </div>
-        <p class="study-tip"><span class="flip-tip">카드를 누르면 뒤집혀요. </span>좌우로 밀어서 넘길 수 있어요. <span class="kbd-tip">← → 넘기기,<span class="flip-tip"> 스페이스 뒤집기,</span> 1 오키, 2 애매, L 리스트</span></p>
+        <p class="study-tip"><span class="flip-tip">카드를 누르면 뒤집혀요. </span><span class="rc-tip">유의어를 누르면 헷갈리는 유의어로 따로 체크돼요. </span>좌우로 밀어서 넘길 수 있어요. <span class="kbd-tip">← → 넘기기,<span class="flip-tip"> 스페이스 뒤집기,</span> 1 애매, 2 어렵, L 리스트</span></p>
       </div>
 
       <div id="sd-toast" class="toast" role="status" hidden></div>
@@ -370,15 +374,15 @@
         <h1 id="se-title"></h1>
         <p id="se-sub" class="lede"></p>
         <div class="stats two">
-          <div class="stat main"><span id="se-ok" class="stat-num num">0</span><span class="stat-label">오키 (외운 단어)</span></div>
-          <div class="stat"><span id="se-vague" class="stat-num num">0</span><span class="stat-label">애매 (헷갈리는 단어)</span></div>
+          <div class="stat vague"><span id="se-vague" class="stat-num num">0</span><span class="stat-label">애매</span></div>
+          <div class="stat hard"><span id="se-hard" class="stat-num num">0</span><span class="stat-label">어렵</span></div>
         </div>
         <div id="se-wrap">
-          <h2>이번에 애매했던 단어</h2>
+          <h2>이번에 체크한 것</h2>
           <ul id="se-list" class="wrong-list"></ul>
         </div>
         <div class="result-actions">
-          <button type="button" id="se-again" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>애매한 단어만 다시 보기</button>
+          <button type="button" id="se-again" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>체크한 것만 다시 보기</button>
           <button type="button" id="se-game" class="btn ghost"><svg class="ic" aria-hidden="true"><use href="#i-gamepad"/></svg><span>이 단어들로 게임</span></button>
           <button type="button" id="se-home" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>처음으로</button>
         </div>
@@ -400,9 +404,10 @@
         <h1 id="wb-title">단어장</h1>
         <p id="wb-sub" class="lede"></p>
       </div>
-      <div class="view-seg" role="tablist" aria-label="단어장 종류">
-        <button type="button" role="tab" data-wbtab="vague" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>헷갈리는 단어 <b class="num" id="wb-n-vague">0</b></button>
-        <button type="button" role="tab" data-wbtab="known" aria-selected="false"><svg class="ic" aria-hidden="true"><use href="#i-book-check"/></svg>외운 단어 <b class="num" id="wb-n-known">0</b></button>
+      <div class="view-seg" id="wb-tabs" role="tablist" aria-label="단어장 종류">
+        <button type="button" role="tab" data-wbtab="vague" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><span class="full">헷갈리는 단어</span><span class="short">애매</span> <b class="num" id="wb-n-vague">0</b></button>
+        <button type="button" role="tab" data-wbtab="hard" aria-selected="false"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><span class="full">어려운 단어</span><span class="short">어렵</span> <b class="num" id="wb-n-hard">0</b></button>
+        <button type="button" role="tab" data-wbtab="syn" aria-selected="false" class="only-rc-tab"><svg class="ic" aria-hidden="true"><use href="#i-branch"/></svg><span class="full">헷갈리는 유의어</span><span class="short">유의어</span> <b class="num" id="wb-n-syn">0</b></button>
       </div>
       <div class="wb-actions">
         <button type="button" id="wb-study" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>카드로 보기</button>
