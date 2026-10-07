@@ -332,7 +332,7 @@
       source: pool,               // 다시 하기용 원본
       pool: choicePool,           // 보기 생성용
       // 헷갈리는 단어, 자주 틀린 단어가 먼저 (약간의 무작위 포함)
-      queue: pool.map((w) => ({ w, k: Store.priority(mode, w.w, w.key) + (w.deck === "rc" && hasMarkedSyn(w) ? 2 : 0) + Math.random() * 2 }))
+      queue: pool.map((w) => ({ w, k: Store.priority(mode, w.w, w.key) + (w.deck === "rc" && hasMarkedSyn(w) ? 8 : 0) + Math.random() * 2 }))
                  .sort((a, b) => b.k - a.k).map((o) => o.w),
       startedAt: Date.now(),
       tag: null,                  // "flag" = 단어장에서 시작
@@ -409,9 +409,9 @@
     const type = canAskNo && Math.random() < 0.5 ? "no" : "yes";
     let own = shuffle(item.t);
     if (item.deck === "rc") {
-      // 헷갈리는 유의어로 체크한 것을 앞으로 (70% 확률로 정답/보기에 들어감)
+      // 헷갈리는 유의어로 체크한 것을 항상 먼저 (정답 또는 보기에 들어감)
       const marked = own.filter((t) => Store.isFlagged(synKey(item, t)));
-      if (marked.length && Math.random() < 0.7) own = [...marked, ...own.filter((t) => !marked.includes(t))];
+      if (marked.length) own = [...marked, ...own.filter((t) => !marked.includes(t))];
     }
     let choices;
     if (type === "yes") {
@@ -728,10 +728,6 @@
     const st = Store.state;
     const nick = st.profile && st.profile.nickname;
     $("records-title").textContent = nick ? `${nick}님의 기록` : "내 기록";
-    const today = st.daily[Store.dayKey()];
-    $("k-today").textContent = today ? today.n : 0;
-    $("k-flag").textContent = countDeckMarks("voca", "vague") + countDeckMarks("rc", "vague");
-    $("k-hard").textContent = countDeckMarks("voca", "hard") + countDeckMarks("rc", "hard");
     renderStreak();
     renderConditions();
   }
@@ -994,6 +990,17 @@
       return `<button type="button" class="syn${on ? " on" : ""}" data-syn="${esc(synKey(item, s))}" aria-pressed="${on}" title="헷갈리는 유의어로 체크">${esc(s)}</button>`;
     }).join("");
   }
+  // 리스트용: 체크한 유의어만 칩으로 (누르면 해제, 다시 누르면 체크)
+  function checkedSynChips(item) {
+    const out = [], seen = new Set();
+    item.senses.forEach(([, syn]) => splitSyn(syn).forEach((s) => {
+      const k = synKey(item, s);
+      if (seen.has(k) || !Store.isFlagged(k)) return;
+      seen.add(k);
+      out.push(`<button type="button" class="syn on" data-syn="${esc(k)}" aria-pressed="true" title="헷갈리는 유의어 체크 해제">${esc(s)}</button>`);
+    }));
+    return out.length ? `<div class="lsyns">${out.join("")}</div>` : "";
+  }
   // 어디서든 유의어 칩을 누르면 체크 / 해제
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-syn]");
@@ -1139,6 +1146,7 @@
           <span class="idx num">${i + 1}</span>
           <span class="txt"><span class="w">${esc(w.w)}</span><span class="m">${esc(listMeaning(w))}</span></span>
         </button>
+        ${w.deck === "rc" ? checkedSynChips(w) : ""}
         <div class="lm">
           <button type="button" class="mark-mini vague${m === "vague" ? " on" : ""}" data-lm="vague" aria-pressed="${m === "vague"}">애매</button>
           <button type="button" class="mark-mini hard${m === "hard" ? " on" : ""}" data-lm="hard" aria-pressed="${m === "hard"}">어렵</button>

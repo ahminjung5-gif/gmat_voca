@@ -818,3 +818,13 @@ button.syn.on { border-color: var(--amber); background: var(--amber-tint); color
 #wb-tabs.three .short { display: inline; }
 #wb-tabs.three button .ic { display: none; }
 #screen-wordbook [data-wbtab="syn"][aria-selected="true"] { background: var(--amber-tint); border-color: var(--amber); color: var(--amber); }
+
+/* RC 리스트: 체크한 유의어 칩 */
+.sd-list li { grid-template-columns: 1fr auto; grid-template-areas: "row lm" "syn syn"; }
+.sd-list li .sd-row { grid-area: row; }
+.sd-list li .lm { grid-area: lm; }
+.lsyns { grid-area: syn; display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 10px 56px; margin-top: -4px; transition: filter .15s ease; }
+.lsyns button.syn { font-size: .78rem; padding: 1px 8px; }
+.lsyns button.syn:not(.on) { text-decoration: line-through; color: var(--text-soft); background: transparent; border-color: var(--line-strong); font-weight: 400; }
+.sd-list.hide-mean .lsyns { filter: blur(5px); }
+.sd-list.hide-mean li:hover .lsyns { filter: none; }
