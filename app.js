@@ -281,7 +281,7 @@
     } else {
       const sorted = [...curDays()].sort((a, b) => a - b);
       const label = sorted.length <= 4 ? sorted.map((d) => `Day ${d}`).join(", ") : `Day ${sorted.length}개`;
-      el.summary.textContent = `${label} 선택, 문제 ${n}개`;
+      el.summary.textContent = `${label} 선택, ${n}개 중 한 판 ${Math.min(n, ROUND_SIZE)}문제`;
     }
     el.start.disabled = n === 0;
     saveSettings();
@@ -323,17 +323,50 @@
     r: ["표제어의 유의어<u>인</u> 것은?", "표제어의 유의어가 <u>아닌</u> 것은?"],
   };
 
-  // pool: 출제할 단어 / choicePool: 오답 보기를 뽑을 단어 범위
+  const ROUND_SIZE = 20;          // 한 판 문제 수
+  const RECENT_KEY = "gmat-voca-recent";
+
+  // 이번 판 20문제 고르기
+  //  - 체크한 단어(어렵/애매/헷갈리는 유의어)는 최대 12개까지 우선, 그 안에서도 무작위
+  //  - 나머지는 무작위로 채우고, 최근 두 판에 나온 단어는 되도록 뺌
+  function pickRound(pool, mode) {
+    if (pool.length <= ROUND_SIZE) return shuffle(pool);
+    let recent = new Set();
+    try { recent = new Set(JSON.parse(localStorage.getItem(RECENT_KEY) || "[]")); } catch (_) {}
+    const weight = (w) => {
+      const m = Store.getMark(w.key);
+      const s = Store.wordStat(mode, w.w);
+      return (m === "hard" ? 3 : m === "vague" ? 2 : 0) + (w.deck === "rc" && hasMarkedSyn(w) ? 2 : 0) + (s ? Math.min(s.w, 3) * 0.5 : 0);
+    };
+    const marked = [], rest = [];
+    pool.forEach((w) => (weight(w) > 0 ? marked : rest).push(w));
+    // 가중치 + 무작위로 섞어서 체크한 단어도 판마다 다르게
+    const priorityPick = marked
+      .map((w) => ({ w, k: weight(w) * Math.random() + Math.random() * 2 - (recent.has(w.key) ? 3 : 0) }))
+      .sort((a, b) => b.k - a.k).slice(0, Math.min(12, marked.length)).map((o) => o.w);
+    const chosen = new Set(priorityPick);
+    const fresh = shuffle(rest.concat(marked).filter((w) => !chosen.has(w) && !recent.has(w.key)));
+    const stale = shuffle(rest.concat(marked).filter((w) => !chosen.has(w) && recent.has(w.key)));
+    const round = priorityPick.concat(fresh, stale).slice(0, ROUND_SIZE);
+    return shuffle(round);
+  }
+  function rememberRound(list) {
+    try {
+      const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      localStorage.setItem(RECENT_KEY, JSON.stringify(list.map((w) => w.key).concat(prev).slice(0, ROUND_SIZE * 2)));
+    } catch (_) {}
+  }
+
+  // pool: 출제할 단어 범위 / choicePool: 오답 보기를 뽑을 단어 범위
   function startGame(pool, mode, choicePool = pool) {
     if (!pool.length) return;
     game = {
       mode,
       deck: pool[0].deck,
-      source: pool,               // 다시 하기용 원본
+      source: pool,               // 다시 하기용 원본 (여기서 매번 새로 20개)
       pool: choicePool,           // 보기 생성용
-      // 헷갈리는 단어, 자주 틀린 단어가 먼저 (약간의 무작위 포함)
-      queue: pool.map((w) => ({ w, k: Store.priority(mode, w.w, w.key) + (w.deck === "rc" && hasMarkedSyn(w) ? 8 : 0) + Math.random() * 2 }))
-                 .sort((a, b) => b.k - a.k).map((o) => o.w),
+      round: null,
+      queue: null,
       startedAt: Date.now(),
       tag: null,                  // "flag" = 단어장에서 시작
       current: null,
@@ -349,6 +382,9 @@
       tick: null,
       ended: false,
     };
+    game.round = pickRound(pool, mode);
+    game.queue = game.round.slice();
+    rememberRound(game.round);
     renderLives();
     showScreen("game");
     nextWord();
@@ -380,8 +416,48 @@
     return shuffle([{ text: answer, ok: true }, ...picks.map((t) => ({ text: t, ok: false }))]);
   }
 
+  // 단어 사이의 유의어 관계 (VOCA + RC set 전체에서)
+  //   A의 유의어 목록에 B가 있으면 A-B는 관계 있음
+  let REL = null;
+  function relations() {
+    if (REL) return REL;
+    REL = new Map();
+    const link = (a, b) => {
+      a = a.toLowerCase(); b = b.toLowerCase();
+      if (a === b) return;
+      (REL.get(a) || REL.set(a, new Set()).get(a)).add(b);
+      (REL.get(b) || REL.set(b, new Set()).get(b)).add(a);
+    };
+    [...WORDS, ...RCS].forEach((w) => w.t.forEach((t) => link(w.w, t)));
+    return REL;
+  }
+  // 직접 "이것도 유의어예요"라고 알려준 짝 (이 기기에 저장)
+  const OK_PAIRS_KEY = "gmat-voca-ok-pairs";
+  let okPairs = new Set();
+  try { okPairs = new Set(JSON.parse(localStorage.getItem(OK_PAIRS_KEY) || "[]")); } catch (_) {}
+  const pairKey = (a, b) => [a.toLowerCase(), b.toLowerCase()].sort().join("|");
+  // 이 단어와 관계있다고 볼 만한 단어 전부: 자기 유의어 + 다른 표를 통해 이어진 단어
+  function relatedSet(item) {
+    const rel = relations();
+    const head = item.w.toLowerCase();
+    const out = new Set([head, ...item.t.map((t) => t.toLowerCase())]);
+    (rel.get(head) || []).forEach((x) => out.add(x));
+    // 표제어의 유의어가 다른 표에서 표제어로 쓰였으면 그 유의어들까지 (예: reflect → show → display)
+    item.t.forEach((t) => (rel.get(t.toLowerCase()) || []).forEach((x) => { if ((rel.get(x) || new Set()).has(head)) out.add(x); }));
+    return out;
+  }
+  function isRelated(item, term, related) {
+    const k = term.toLowerCase();
+    if (related.has(k)) return true;
+    if (okPairs.has(pairKey(item.w, term))) return true;
+    // 여러 단어로 된 보기(예: "account for")는 첫 단어로도 확인
+    const first = k.split(" ")[0];
+    return first.length > 3 && related.has(first);
+  }
+
   // 다른 단어의 유의어에서 '이 단어와 관계없는' 단어를 n개 뽑음
   function outsiderTerms(item, n) {
+    const related = relatedSet(item);
     const own = new Set(item.t.map((t) => t.toLowerCase()));
     const stem = item.w.toLowerCase().slice(0, 5);
     const picked = new Set();
@@ -392,7 +468,7 @@
         if (w === item || !w.t.length) continue;
         const t = w.t[Math.floor(Math.random() * w.t.length)];
         const k = t.toLowerCase();
-        if (own.has(k) || picked.has(k) || k === item.w.toLowerCase() || k.startsWith(stem)) continue;
+        if (own.has(k) || picked.has(k) || k === item.w.toLowerCase() || k.startsWith(stem) || isRelated(item, t, related)) continue;
         picked.add(k);
         out.push(t);
       }
@@ -442,6 +518,7 @@
     el.hint.disabled = !(item.e || item.deck === "rc");
     el.hint.hidden = false;
     el.next.hidden = true;
+    $("btn-appeal").hidden = true;
     el.progress.textContent = game.queue.length + 1;
 
     const clearBack = () => {
@@ -455,6 +532,7 @@
       el.question.innerHTML = '<span class="q-pill">이 단어의 뜻은?</span>';
     } else {
       const r = buildTermChoices(item);
+      game.qType = r.type;
       choices = r.choices;
       const [yes, no] = Q_LABEL[game.mode];
       el.question.innerHTML = r.type === "yes" ? `<span class="q-pill yes">${yes}</span>` : `<span class="q-pill no">${no}</span>`;
@@ -549,10 +627,37 @@
     setTimeout(() => el.card.classList.add("flipped"), isOk ? 150 : 420);
 
     el.hint.hidden = true;
+    // 유의어 문제에서 틀렸을 때: 데이터에 없는 유의어 관계일 수 있으니 이의 제기 버튼
+    if (!isOk && btn && game.mode !== "m") {
+      const disputed = game.qType === "yes" ? btn.innerText.replace(/^\d+\s*/, "").trim()
+        : (el.choices.querySelector('.choice[data-ok="true"]') || {}).innerText;
+      game.appeal = disputed ? { term: disputed.replace(/^\d+\s*/, "").trim(), item } : null;
+      $("btn-appeal").hidden = !game.appeal;
+      if (game.appeal) $("btn-appeal").querySelector("span").textContent = `'${game.appeal.term}'도 유의어예요`;
+    }
     el.next.querySelector(".label").textContent = game.lives <= 0 ? "결과 보기" : "다음 단어";
     el.next.hidden = false;
     el.next.focus({ preventScroll: true });
   }
+
+  // "이것도 유의어예요": 정답 처리로 되돌리고, 다음부터 이 짝은 '관계없는 보기'로 안 나오게
+  $("btn-appeal").addEventListener("click", () => {
+    if (!game || !game.appeal) return;
+    const { term, item } = game.appeal;
+    okPairs.add(pairKey(item.w, term));
+    try { localStorage.setItem(OK_PAIRS_KEY, JSON.stringify([...okPairs])); } catch (_) {}
+    game.wrong--; game.correct++;
+    game.lives = Math.min(MAX_LIVES, game.lives + 1);
+    game.wrongWords.delete(item.key);
+    const qi = game.queue.lastIndexOf(item);
+    if (qi >= 0) game.queue.splice(qi, 1);
+    renderLives();
+    el.backVerdict.innerHTML = `<svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>알려줘서 고마워요, 정답으로 칠게요`;
+    el.backVerdict.className = "verdict ok";
+    el.next.querySelector(".label").textContent = "다음 단어";
+    game.appeal = null;
+    $("btn-appeal").hidden = true;
+  });
 
   function goNext() {
     if (!game || !game.answered || game.paused) return;
@@ -648,7 +753,7 @@
       Store.recordSession({
         mode: game.mode,
         days: [...new Set(game.source.map((w) => w.d))].sort((a, b) => a - b),
-        total: game.source.length, correct: game.correct, wrong: game.wrong, hints: game.hints,
+        total: game.round.length, correct: game.correct, wrong: game.wrong, hints: game.hints,
         result: game.tag ? `${game.tag}-${reason}` : reason,
         dur: Math.round((Date.now() - game.startedAt) / 1000),
       });
@@ -1295,7 +1400,7 @@
      단어장 (덱별: 헷갈리는 단어 / 어려운 단어 / RC set은 헷갈리는 유의어)
      ========================================================= */
   let wbOpen = new Set();
-  let wbTab = "vague";
+  let wbTab = "all";
   let wbDeck = "voca";
 
   // 체크한 유의어 목록: [{ key, at, syn, item }]
@@ -1332,22 +1437,24 @@
       else list.sort((a, b) => (a.at < b.at ? 1 : -1));
       return list;
     }
-    let list = Store.markedWords(wbTab).map((f) => ({ ...f, item: byKey.get(f.word) })).filter((f) => f.item && f.item.deck === wbDeck);
+    const raw = wbTab === "all" ? Store.markedWords("hard").concat(Store.markedWords("vague")).sort((a, b) => (a.at < b.at ? 1 : -1)) : Store.markedWords(wbTab);
+    let list = raw.map((f) => ({ ...f, item: byKey.get(f.word) })).filter((f) => f.item && f.item.deck === wbDeck);
     if (q) list = list.filter((f) => f.item.w.toLowerCase().includes(q) || (f.item.m || "").toLowerCase().includes(q) || (f.item.v || "").toLowerCase().includes(q));
     if (settings.wbSort === "day") list.sort((a, b) => a.item.d - b.item.d || a.item.w.localeCompare(b.item.w));
     else if (settings.wbSort === "abc") list.sort((a, b) => a.item.w.localeCompare(b.item.w));
     return list;
   }
-  function wbTotal(tab) { return tab === "syn" ? synCount() : countDeckMarks(wbDeck, tab); }
+  function wbTotal(tab) {
+    if (tab === "syn") return synCount();
+    if (tab === "all") return countDeckMarks(wbDeck, "vague") + countDeckMarks(wbDeck, "hard");
+    return countDeckMarks(wbDeck, tab);
+  }
   function updateWordbookHead() {
     $("wb-n-vague").textContent = countDeckMarks(wbDeck, "vague");
     $("wb-n-hard").textContent = countDeckMarks(wbDeck, "hard");
     $("wb-n-syn").textContent = synCount();
+    $("wb-n-all").textContent = wbTotal("all");
     const total = wbTotal(wbTab);
-    $("wb-sub").textContent = !total ? "아직 비어 있어요."
-      : wbTab === "vague" ? `애매한 것 ${total}개. 이제 알겠으면 체크를 풀어 주세요.`
-      : wbTab === "hard" ? `어려운 것 ${total}개. 조금 익숙해지면 '애매'로 내려도 돼요.`
-      : `헷갈리는 유의어 ${total}개. 유의어를 다시 누르면 체크가 풀려요.`;
     document.querySelectorAll("#screen-wordbook [data-wbtab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.wbtab === wbTab)));
     ["wb-study", "wb-game-m", "wb-game-v"].forEach((id) => { $(id).disabled = total === 0; });
   }
@@ -1362,7 +1469,7 @@
     $("wb-empty").hidden = list.length > 0;
     $("wb-empty").textContent = total === 0
       ? (wbTab === "syn" ? "RC set 공부 카드에서 헷갈리는 유의어를 누르면 여기에 쌓여요."
-        : `공부 모드에서 '${MARK_SHORT[wbTab]}'을 누른 것이 여기에 쌓여요.` + (wbTab === "vague" ? " 게임 결과 화면에서도 넣을 수 있어요." : ""))
+        : `공부 모드에서 ${wbTab === "all" ? "'애매'나 '어렵'" : `'${MARK_SHORT[wbTab]}'`}을 누른 것이 여기에 쌓여요.`)
       : "찾는 단어가 없어요.";
 
     if (wbTab === "syn") {
@@ -1409,7 +1516,7 @@
   function openWordbook(deck) {
     wbDeck = deck;
     wbOpen = new Set();
-    wbTab = countDeckMarks(deck, "vague") || !countDeckMarks(deck, "hard") ? "vague" : "hard";
+    wbTab = "all";
     $("wb-search").value = "";
     $("wb-title").textContent = `${DECKS[deck].label} 단어장`;
     $("wb-tabs").classList.toggle("three", deck === "rc");
@@ -1444,7 +1551,7 @@
         b.classList.toggle("on", on);
         b.setAttribute("aria-pressed", String(on));
       });
-      li.classList.toggle("moved", m !== wbTab);
+      li.classList.toggle("moved", wbTab === "all" ? !m : m !== wbTab);
       return;
     }
     const main = e.target.closest(".wb-main");
@@ -1463,9 +1570,9 @@
       const seen = new Set();
       return wbWords().map((f) => f.item).filter((it) => (seen.has(it.key) ? false : seen.add(it.key)));
     }
-    return wbWords().map((f) => f.item).filter((it) => Store.getMark(it.key) === wbTab);
+    return wbWords().map((f) => f.item).filter((it) => (wbTab === "all" ? !!Store.getMark(it.key) : Store.getMark(it.key) === wbTab));
   }
-  const WB_LABEL = { vague: "애매", hard: "어렵", syn: "헷갈리는 유의어" };
+  const WB_LABEL = { all: "애매+어렵", vague: "애매", hard: "어렵", syn: "헷갈리는 유의어" };
   $("wb-study").addEventListener("click", () => {
     startStudy(wbItems(), { label: WB_LABEL[wbTab], order: settings.stOrder, front: settings.stFront });
   });

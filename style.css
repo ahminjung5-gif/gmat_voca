@@ -828,3 +828,24 @@ button.syn.on { border-color: var(--amber); background: var(--amber-tint); color
 .lsyns button.syn:not(.on) { text-decoration: line-through; color: var(--text-soft); background: transparent; border-color: var(--line-strong); font-weight: 400; }
 .sd-list.hide-mean .lsyns { filter: blur(5px); }
 .sd-list.hide-mean li:hover .lsyns { filter: none; }
+
+/* 각 화면 맨 윗줄(뒤로 가기 · 낮/밤) 고정 */
+#screen-setup > .hud, #screen-game > .hud, #screen-wordbook > .hud {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 6;
+  background: var(--bg); margin: -32px -18px 14px; padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 560px) {
+  #screen-setup > .hud, #screen-game > .hud, #screen-wordbook > .hud { margin: -20px -12px 12px; padding: 12px 12px 10px; }
+}
+/* 단어장 탭: VOCA 3개, RC set 4개 */
+#wb-tabs { grid-template-columns: repeat(3, 1fr); }
+#wb-tabs.three { grid-template-columns: repeat(4, 1fr); }
+#screen-wordbook [data-wbtab="all"][aria-selected="true"] { background: var(--tint); border-color: var(--primary); color: var(--primary); }
+#btn-appeal { margin-left: auto; }
+#btn-appeal + #btn-next { margin-left: 0; }
+.action-bar { flex-wrap: wrap; }
+@media (max-width: 560px) {
+  #wb-tabs .full { display: none; }
+  #wb-tabs .short { display: inline; }
+}
