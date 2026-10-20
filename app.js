@@ -309,9 +309,9 @@
 
   function goHome() {
     game = null; study = null;
-    Store.flush();
     showScreen("home");
     refreshHome();
+    Store.refreshToday();
   }
 
   /* =========================================================
@@ -824,7 +824,7 @@
     const map = { local: "이 기기에 저장", idle: Store.state.user ? "동기화됨" : "", saving: "저장 중…", error: "동기화 실패, 다시 시도하는 중" };
     const node = $("sync-status");
     node.textContent = Store.state.needsMigration && Store.state.sync !== "error"
-      ? "일부 기록은 이 기기에만 저장 중 (SQL 실행 필요)"
+      ? "기기 간 동기화가 꺼져 있어요 (SQL 실행 필요)"
       : map[Store.state.sync] || "";
     node.dataset.state = Store.state.sync;
   }
@@ -945,7 +945,7 @@
     const uid = st.user ? st.user.id : null;
     if (uid && uid !== lastUserId) closeModal($("login-modal"));
     lastUserId = uid;
-    if (uid && st.sync === "idle" && !(st.profile && st.profile.nickname) && $("account-modal").hidden) openAccount(true);
+    if (uid && st.cloudLoaded && !(st.profile && st.profile.nickname) && $("account-modal").hidden) openAccount(true);
   });
 
   /* =========================================================
@@ -1603,6 +1603,7 @@
     $("login-nudge").hidden = false;
     $("login-nudge").textContent = "단어 데이터를 불러오지 못했어요. data/words.js, data/rcsets.js 파일이 있는지 확인하세요.";
   }
+  Store.setDayTotal((deck, d) => DECKS[deck].dayCounts[d] || 0);
   refreshHome();
   Store.init();
 })();

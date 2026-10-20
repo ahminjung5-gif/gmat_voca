@@ -104,6 +104,28 @@
     if (!state.todayViews || state.todayViews.date !== t) state.todayViews = { date: t, voca: {}, rc: {} };
     return state.todayViews[deck];
   }
+  // Day별 카드 수 (앱에서 알려줌) - 다른 기기에서 본 카드를 합쳐 완료 여부를 다시 계산할 때 사용
+  let dayTotalFn = null;
+  function setDayTotal(fn) { dayTotalFn = fn; }
+  const dirtyViews = [];   // 아직 계정에 안 올린 '오늘 본 카드'
+  function recomputeDone() {
+    const dk = dayKey();
+    const day = state.daily[dk] || newDay();
+    let changed = false;
+    ["voca", "rc"].forEach((deck) => {
+      const flag = deck === "rc" ? "rd" : "vd";
+      if (day[flag] || !dayTotalFn) return;
+      const v = todayViewsFor(deck);
+      if (Object.keys(v).some((d) => { const t = dayTotalFn(deck, Number(d)); return t && v[d].length >= t; })) {
+        day[flag] = true; changed = true;
+      }
+    });
+    if (day.vd === undefined) day.vd = false;
+    if (day.rd === undefined) day.rd = false;
+    state.daily[dk] = day;
+    if (changed) dirtyDays.add(dk);
+    return changed;
+  }
   function recordView(deck, dayNo, key, total) {
     const dk = dayKey();
     const day = state.daily[dk] || newDay();
@@ -111,6 +133,7 @@
     const list = views[dayNo] || (views[dayNo] = []);
     if (!list.includes(key)) {
       list.push(key);
+      dirtyViews.push({ day: dk, deck, day_no: dayNo, key });
       day.v = (day.v || 0) + 1;
       const flag = deck === "rc" ? "rd" : "vd";
       if (!day[flag] && total && list.length >= total) { day[flag] = true; emit(); }
@@ -218,7 +241,7 @@
   async function flush() {
     clearTimeout(flushTimer);
     if (!state.user || !sb) return;
-    if (!dirtyStats.size && !dirtyDays.size && !dirtyMarks.size && !dirtyPos.size && !dirtySeen.size) return;
+    if (!dirtyStats.size && !dirtyDays.size && !dirtyMarks.size && !dirtyPos.size && !dirtySeen.size && !dirtyViews.length) return;
     const uid = state.user.id;
     const statKeys = [...dirtyStats].filter((k) => !(state.needsMigration && k.startsWith("r:")));
     const statRows = statKeys.map((k) => {
@@ -242,6 +265,7 @@
     const extraOk = !state.needsMigration;
     statKeys.forEach((k) => dirtyStats.delete(k)); dirtyDays.clear();
     const seenRows = extraOk ? [...dirtySeen].map((k) => ({ user_id: uid, key: k })) : [];
+    const viewRows = state.hasSync ? dirtyViews.splice(0).map((r) => ({ user_id: uid, ...r })) : [];
     if (extraOk) { dirtyMarks.clear(); dirtyPos.clear(); dirtySeen.clear(); }
     setSync("saving");
     try {
@@ -249,7 +273,20 @@
         const { error } = await sb.from("word_stats").upsert(statRows.slice(i, i + 500), { onConflict: "user_id,mode,word" });
         if (error) throw error;
       }
-      if (dayRows.length) {
+      for (let i = 0; i < viewRows.length; i += 500) {
+        const { error } = await sb.from("today_views").upsert(viewRows.slice(i, i + 500), { onConflict: "user_id,day,deck,key", ignoreDuplicates: true });
+        if (error) throw error;
+      }
+      if (dayRows.length && state.hasSync) {
+        // 기기끼리 덮어쓰지 않도록: 숫자는 큰 값, 완료 표시는 한 번 켜지면 계속 켜짐
+        for (const r of dayRows) {
+          const { error } = await sb.rpc("merge_daily", {
+            p_day: r.day, p_answered: r.answered, p_correct: r.correct, p_seconds: r.seconds,
+            p_viewed: r.viewed || 0, p_voca_done: r.voca_done, p_rc_done: r.rc_done,
+          });
+          if (error) throw error;
+        }
+      } else if (dayRows.length) {
         const { error } = await sb.from("daily_activity").upsert(dayRows, { onConflict: "user_id,day" });
         if (error) throw error;
       }
@@ -281,6 +318,7 @@
       flagAdds.concat(flagDels).forEach((w) => dirtyMarks.add(w));
       posRows.forEach((r) => dirtyPos.add(r.key));
       seenRows.forEach((r) => dirtySeen.add(r.key));
+      viewRows.forEach(({ user_id, ...r }) => dirtyViews.push(r));
       setSync("error");
       clearTimeout(flushTimer);
       flushTimer = setTimeout(flush, 15000);
@@ -299,6 +337,62 @@
     return out;
   }
 
+  // 하루치 기록 합치기 (어느 쪽도 잃지 않게)
+  function mergeDay(a, b) {
+    if (!a) return b; if (!b) return a;
+    const pickFlag = (x, y) => (x === undefined && y === undefined ? undefined : !!(x || y));
+    return {
+      n: Math.max(a.n || 0, b.n || 0), c: Math.max(a.c || 0, b.c || 0), sec: Math.max(a.sec || 0, b.sec || 0),
+      v: Math.max(a.v || 0, b.v || 0), vd: pickFlag(a.vd, b.vd), rd: pickFlag(a.rd, b.rd),
+    };
+  }
+  const fromRow = (r) => {
+    const x = { n: r.answered || 0, c: r.correct || 0, sec: r.seconds || 0, v: r.viewed || 0 };
+    if (r.voca_done !== undefined && r.voca_done !== null) x.vd = r.voca_done;
+    if (r.rc_done !== undefined && r.rc_done !== null) x.rd = r.rc_done;
+    return x;
+  };
+
+  // 오늘 기록만 가볍게 다시 가져옴 (앱으로 돌아올 때마다)
+  let refreshing = false;
+  async function refreshToday() {
+    if (!state.user || !sb || !state.hasSync || refreshing) return;
+    refreshing = true;
+    try {
+      await flush();   // 이 기기에서 한 것 먼저 올리고
+      const dk = dayKey();
+      const [{ data: dayRow }, { data: viewRows, error: vErr }] = await Promise.all([
+        sb.from("daily_activity").select("day,answered,correct,seconds,viewed,voca_done,rc_done").eq("day", dk).maybeSingle(),
+        sb.from("today_views").select("deck,day_no,key").eq("day", dk).limit(5000),
+      ]);
+      if (vErr) throw vErr;
+      // 이 기기에만 있고 계정에 아직 없는 카드는 다시 올림
+      const cloudKeys = new Set((viewRows || []).map((r) => `${r.deck}|${r.key}`));
+      ["voca", "rc"].forEach((deck) => {
+        const v = todayViewsFor(deck);
+        Object.keys(v).forEach((d) => v[d].forEach((key) => {
+          if (!cloudKeys.has(`${deck}|${key}`) && !dirtyViews.some((x) => x.deck === deck && x.key === key)) {
+            dirtyViews.push({ day: dk, deck, day_no: Number(d), key });
+          }
+        }));
+      });
+      if (dirtyViews.length) scheduleFlush();
+      (viewRows || []).forEach((r) => {
+        const v = todayViewsFor(r.deck);
+        const list = v[r.day_no] || (v[r.day_no] = []);
+        if (!list.includes(r.key)) list.push(r.key);
+      });
+      if (dayRow) state.daily[dk] = mergeDay(state.daily[dk], fromRow(dayRow));
+      if (recomputeDone()) scheduleFlush();
+      saveLocal();
+      emit();
+    } catch (e) {
+      console.warn("오늘 기록을 다시 가져오지 못했어요", e);
+    } finally {
+      refreshing = false;
+    }
+  }
+
   async function loadCloud() {
     setSync("saving");
     const uid = state.user.id;
@@ -306,6 +400,8 @@
     const probe = await sb.from("daily_activity").select("voca_done").limit(1);
     const probe2 = await sb.from("seen_cards").select("key").limit(1);
     const hasV3 = !probe.error && !probe2.error;
+    const probe3 = await sb.from("today_views").select("key").limit(1);
+    state.hasSync = hasV3 && !probe3.error;   // 기기 간 '오늘의 조건' 동기화용 SQL 실행 여부
     const [{ data: prof }, statRows, dayRows, { data: sessRows }] = await Promise.all([
       sb.from("profiles").select("nickname").eq("id", uid).maybeSingle(),
       fetchAll("word_stats", "mode,word,correct,wrong,streak,last_seen,in_note"),
@@ -320,7 +416,7 @@
       const { data, error } = await sb.from("study_progress").select("key,idx");
       if (error) throw error;
       posRows = data || [];
-      state.needsMigration = !hasV3;
+      state.needsMigration = !state.hasSync;
       if (hasV3) {
         const seenRows = await fetchAll("seen_cards", "key");
         const localSeen = (loadLocal() || {}).seen || {};
@@ -344,13 +440,11 @@
     state.daily = {};
     const localDaily = (loadLocal() || {}).daily || {};
     dayRows.forEach((r) => {
-      const x = { n: r.answered, c: r.correct, sec: r.seconds, v: r.viewed || 0 };
-      if (r.voca_done !== undefined && r.voca_done !== null) x.vd = r.voca_done;
-      if (r.rc_done !== undefined && r.rc_done !== null) x.rd = r.rc_done;
-      // SQL 실행 전이라 클라우드에 완료 표시가 없으면 이 기기 기록을 사용
+      // 클라우드와 이 기기 기록을 합침 (어느 쪽에서 한 공부도 잃지 않게)
+      const merged = mergeDay(fromRow(r), localDaily[r.day]);
+      state.daily[r.day] = merged;
       const l = localDaily[r.day];
-      if (l) { if (x.vd === undefined && l.vd !== undefined) x.vd = l.vd; if (x.rd === undefined && l.rd !== undefined) x.rd = l.rd; }
-      state.daily[r.day] = x;
+      if (l && ((l.vd && !r.voca_done) || (l.rd && !r.rc_done) || (l.n || 0) > (r.answered || 0))) dirtyDays.add(r.day);
     });
     Object.keys(localDaily).forEach((k) => { if (!state.daily[k]) { state.daily[k] = localDaily[k]; dirtyDays.add(k); } });
     if (!state.needsMigration) {
@@ -417,7 +511,8 @@
     state.ready = true;
     emit();
     if (state.user && sb) {
-      try { await loadCloud(); } catch (e) { console.error(e); setSync("error"); }
+      state.cloudLoaded = false;
+      try { await loadCloud(); state.cloudLoaded = true; await refreshToday(); } catch (e) { console.error(e); setSync("error"); }
     } else {
       setSync(hasCloud ? "idle" : "local");
     }
@@ -514,13 +609,16 @@
   }
 
   window.addEventListener("pagehide", () => { flush(); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else refreshToday(); });
+  window.addEventListener("focus", () => { refreshToday(); });
+  window.addEventListener("pageshow", (e) => { if (e.persisted) refreshToday(); });
+  setInterval(() => { if (!document.hidden) refreshToday(); }, 60000);
 
   window.Store = {
     state, hasCloud,
     init, onChange: (fn) => listeners.add(fn),
     recordAnswer, recordSession, recordView, flush,
-    todayViewCounts, todayDone,
+    todayViewCounts, todayDone, refreshToday, setDayTotal,
     getMark, setMark, toggleMark, isFlagged, isHard, toggleFlag, markedWords, countMarks, bestStreak, markSeen, isSeen,
     getStudyPos, setStudyPos,
     signInGoogle, signInEmail, signOut, setNickname,
